@@ -92,5 +92,28 @@ def main(argv: Sequence[str] | None = None, *, log_dir: Path = LOG_DIR) -> int:
     return app.run()
 
 
+MUTEX_NAME = "Local\\gesture-remote"
+ERROR_ALREADY_EXISTS = 183
+
+
+def already_running() -> bool:
+    """True when another gesture-remote holds the per-user mutex.
+
+    Two copies fight over the webcam: the second one only gets black frames. The mutex is held
+    until this process exits (the handle is deliberately never closed).
+    """
+    import ctypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateMutexW(None, False, MUTEX_NAME)
+    return ctypes.get_last_error() == ERROR_ALREADY_EXISTS
+
+
 if __name__ == "__main__":
+    if already_running():
+        message = "gesture-remote is already running: look for its icon near the clock."
+        show_error("gesture-remote tourne déjà : son icône est près de l'horloge (flèche ^).")
+        if sys.stderr is not None:
+            print(message, file=sys.stderr)
+        sys.exit(EXIT_ENVIRONMENT)
     sys.exit(main())
