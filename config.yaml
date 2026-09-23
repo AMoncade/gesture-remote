@@ -14,11 +14,12 @@ settings:
   idle:     { fps: 5, after_s: 1.0 }
   feedback: { sound: true }
 bindings:
-  open_palm:   { type: url,    url: "https://studium.umontreal.ca" }
-  victory:     { type: quit }   # ✌️ closes gesture-remote (held a bit longer, see per_gesture)
+  # label: what the "Gestes disponibles" popup shows (optional)
+  open_palm:   { type: url,    url: "https://studium.umontreal.ca", label: "Ouvre StudiUM" }
+  victory:     { type: quit,   label: "Ferme gesture-remote (tenir un peu)" }
   pointing_up: { type: launch, app: "Apple Music" }
-  closed_fist: { type: keys,   keys: [volumemute] }
+  closed_fist: { type: keys,   keys: [volumemute], label: "Coupe / remet le son" }
   # your own gestures (tools/record.py + tools/train.py)
-  call_me:     { type: script, path: macros/claude_setup.py }   # 4 terminal tabs with claude + Claude app
+  call_me:     { type: script, path: macros/claude_setup.py, label: "4 terminaux Claude + app Claude" }
   # Recognised but bound to nothing (they only log "IGNORED ... unmapped"):
   # thumb_down, thumb_up, ok, trois. Add a line here to give one an action.

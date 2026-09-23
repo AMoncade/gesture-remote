@@ -110,7 +110,12 @@ class Settings(_Strict):
 # --- actions --------------------------------------------------------------------------------
 
 
-class KeysAction(_Strict):
+class _Action(_Strict):
+    label: str | None = None
+    """What the gestures popup shows for this action (a description is made up otherwise)."""
+
+
+class KeysAction(_Action):
     """Press `keys` together as one chord (pyautogui.hotkey), e.g. [playpause] or [ctrl, w]."""
 
     type: Literal["keys"]
@@ -125,7 +130,7 @@ class KeysAction(_Strict):
         return keys
 
 
-class LaunchAction(_Strict):
+class LaunchAction(_Action):
     """Open an app or file. Exactly one of `app`, `app_id` or `path`."""
 
     type: Literal["launch"]
@@ -150,7 +155,7 @@ class LaunchAction(_Strict):
         return self
 
 
-class UrlAction(_Strict):
+class UrlAction(_Action):
     """Open `url` in the default browser."""
 
     type: Literal["url"]
@@ -165,7 +170,7 @@ class UrlAction(_Strict):
         return url
 
 
-class ScriptAction(_Strict):
+class ScriptAction(_Action):
     """Run a Python macro with the project's interpreter, in its own process."""
 
     type: Literal["script"]
@@ -181,7 +186,7 @@ class ScriptAction(_Strict):
         return path
 
 
-class QuitAction(_Strict):
+class QuitAction(_Action):
     """Stop gesture-remote itself (camera released, tray icon removed)."""
 
     type: Literal["quit"]

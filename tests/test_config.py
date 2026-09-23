@@ -103,7 +103,9 @@ def test_shipped_config_loads_with_the_real_key_check(tmp_path: Path, monkeypatc
     # app: is validated through resolve_app but kept as written (lot C resolves it again).
     assert config.bindings["pointing_up"] == LaunchAction(type="launch", app="Apple Music")
     assert start_menu.calls == ["Apple Music"]
-    assert config.bindings["closed_fist"] == KeysAction(type="keys", keys=["volumemute"])
+    assert config.bindings["closed_fist"] == KeysAction(
+        type="keys", keys=["volumemute"], label="Coupe / remet le son"
+    )
     assert config.settings.engine.per_gesture["i_love_you"].stable_frames == 15
 
 
@@ -117,7 +119,9 @@ def test_shipped_config_script_paths_are_absolute(tmp_path: Path, monkeypatch) -
         resolve_app=FakeStartMenu(),
     )
     assert config.bindings["call_me"] == ScriptAction(
-        type="script", path=REPO_ROOT / "macros" / "claude_setup.py"
+        type="script",
+        path=REPO_ROOT / "macros" / "claude_setup.py",
+        label="4 terminaux Claude + app Claude",
     )
 
 

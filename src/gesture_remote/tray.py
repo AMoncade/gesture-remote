@@ -14,6 +14,7 @@ import threading
 from pathlib import Path
 
 from gesture_remote.app import App
+from gesture_remote.help_popup import show_help
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,7 @@ def run_with_tray(app: App, config_path: Path, log_file: Path) -> int:
                 checked=lambda item: app.pipeline.show_view,
                 default=True,
             ),
+            pystray.MenuItem("Gestes disponibles", lambda: show_help(app.store.config)),
             pystray.MenuItem(
                 "Modifier les gestes (config.yaml)", lambda: os.startfile(config_path)
             ),
@@ -77,15 +79,7 @@ def run_with_tray(app: App, config_path: Path, log_file: Path) -> int:
 
     def refresh(icon) -> None:
         icon.visible = True
-        # The icon often lands in the hidden overflow (^) near the clock: say where it is.
-        try:
-            icon.notify(
-                "Lancé. Icône près de l'horloge (flèche ^) : double-clic pour voir la caméra. "
-                "✌️ tenu ou menu Quitter pour fermer.",
-                "gesture-remote",
-            )
-        except Exception:  # notifications unsupported or disabled: not worth failing for
-            logger.debug("tray notification failed", exc_info=True)
+        show_help(app.store.config)  # what you can do, and where the icon hides (^)
         shown = None
         while worker.is_alive() and not app.stop.is_set():
             state = "armed" if app.pipeline.engine.armed else "disarmed"
