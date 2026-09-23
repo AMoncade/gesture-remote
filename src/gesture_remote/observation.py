@@ -47,5 +47,10 @@ class FrameObservation:
     """(width, height) in pixels of the image the landmarks refer to."""
 
     def primary(self) -> HandObservation | None:
-        """The hand with the highest gesture score, or None when no hand was detected."""
-        return max(self.hands, key=lambda hand: hand.score, default=None)
+        """The hand to act on: the best-scored hand showing a gesture, else the best-scored hand.
+
+        A `none` hand carries the real score of MediaPipe's canned "None" class, so ranking every
+        hand by score would let a confident resting hand hide a gesture made by the other one.
+        """
+        gestures = [hand for hand in self.hands if hand.label != NONE_LABEL]
+        return max(gestures or self.hands, key=lambda hand: hand.score, default=None)

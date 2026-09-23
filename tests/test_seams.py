@@ -259,15 +259,6 @@ def test_score_threshold_is_compared_to_the_recognizer_score() -> None:
     assert feed.gesture("victory", 3, score=0.6) == [Ignored("victory", "unmapped")]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "DEFECT (owner: admin, observation.py, frozen in round 1): FrameObservation.primary() "
-        "takes the highest score even for a 'none' hand. MediaPipe's canned 'None' class comes "
-        "with a real score, so with num_hands >= 2 a relaxed hand at 0.95 hides a thumb up at "
-        "0.8 and the engine never fires. Latent while config.yaml keeps num_hands: 1."
-    ),
-)
 def test_primary_prefers_a_gesture_over_a_confident_none_hand() -> None:
     hand = primary(mp_result(("Thumb_Up", 0.8), ("None", 0.95)))
     assert hand is not None
