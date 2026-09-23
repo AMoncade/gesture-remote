@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import subprocess
 import sys
@@ -47,12 +48,12 @@ def main(argv: Sequence[str] | None = None, *, log_dir: Path = LOG_DIR) -> int:
     logger.info("gesture-remote starting; log file %s", log_file)
     try:
         app = build_app(args.config, log_dir=log_dir, debug=args.debug, dry_run=args.dry_run)
-    except ConfigError as error:
+    except ConfigError as error:  # first: ConfigError is a ValueError, like JSONDecodeError
         logger.error("%s", error)  # lists every problem, one per line
         return EXIT_BAD_CONFIG
-    except (subprocess.SubprocessError, OSError) as error:
+    except (subprocess.SubprocessError, OSError, json.JSONDecodeError) as error:
         # Not a ConfigError: resolving a Start-menu app runs PowerShell (Get-StartApps), which
-        # can fail or time out while the config is being validated.
+        # can fail, time out or print something that is not JSON while the config is validated.
         logger.error(
             "startup failed while validating %s (Get-StartApps or file access): %s: %s",
             args.config,
