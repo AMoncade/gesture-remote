@@ -826,16 +826,6 @@ def test_build_app_shares_the_index_and_keeps_running_scripts_across_a_real_relo
 # --- P2.5 restart_required: what the user reads --------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "DEFECT (owner: B, config.py ConfigStore.poll): restart_required is computed against "
-        "the PREVIOUS config, app.py against the STARTUP one. Setting camera back to its startup "
-        "value makes ConfigStore warn 'restart required for those settings' in the same reload "
-        "where app.py logs 'back to their startup values' and clears the overlay. Proposed: "
-        "ConfigStore compares against the config it loaded first."
-    ),
-)
 def test_reverting_a_restart_setting_is_not_reported_as_needing_a_restart(
     tmp_path: Path, clock: Any, caplog: pytest.LogCaptureFixture
 ) -> None:

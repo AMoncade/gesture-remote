@@ -544,7 +544,8 @@ class ConfigReload:
 
     config: Config
     restart_required: tuple[str, ...]
-    """Changed sections among RESTART_SECTIONS: they only take effect after a restart."""
+    """Sections among RESTART_SECTIONS that differ from the config loaded at startup: the camera
+    and the model in use are the startup ones, whatever the reloads in between."""
 
 
 class ConfigStore:
@@ -577,6 +578,7 @@ class ConfigStore:
         self._interval_s = interval_s
         signature = self._signature()
         self._config = load(self._path)
+        self._startup = self._config
         self._last_seen: _Signature = signature
         self._last_attempt: _Signature = signature
         self._next_check = clock() + interval_s
@@ -615,11 +617,11 @@ class ConfigStore:
             logger.exception("Reloading %s failed; keeping the previous config.", self._path)
             return None
 
-        old, self._config = self._config, new
+        self._config = new
         restart = tuple(
             section
             for section in RESTART_SECTIONS
-            if getattr(new.settings, section) != getattr(old.settings, section)
+            if getattr(new.settings, section) != getattr(self._startup.settings, section)
         )
         if restart:
             logger.warning(
