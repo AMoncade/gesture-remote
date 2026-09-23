@@ -122,6 +122,10 @@ on the same landmarks.
   machine registry; ANSI code page 1252). Any test that relies on a child Python's encoding passes
   inside a Claude session regardless: remove `PYTHONIOENCODING`/`PYTHONUTF8` with `monkeypatch`
   in such tests (lot C found it; `test_actions` does it).
+- Same family: **Claude Code sessions also export `NoDefaultCurrentDirectoryInExePath=1`** (not in
+  `HKCU\Environment`), so `shutil.which` skips the cwd inside a session and a "never the cwd"
+  test cannot fail there; such tests `delenv` it (lot B, `test_config`). Python 3.13's
+  `shutil.which` inserts the cwd even with an explicit `path=`: `config.py` walks PATH itself.
 - `os.startfile(exe, arguments=subprocess.list2cmdline(args))` round-trips spaces, quotes,
   trailing `\`, `""` and accents for MSVCRT-parsed programs; `.bat`/custom parsers may differ
   (lot C probe, not a test).
