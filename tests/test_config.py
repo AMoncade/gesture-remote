@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import os
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,7 +13,6 @@ import pyautogui
 import pytest
 
 from conftest import REPO_ROOT, FakeClock
-from gesture_remote import config as config_module
 from gesture_remote.config import (
     AppResolutionError,
     Config,
@@ -365,28 +365,58 @@ def test_environment_variables_are_expanded_in_launch_path(
 BARE = "bindings: {pointing_up: {type: launch, path: notepad.exe}}"
 
 
-def test_bare_name_found_on_path(cfg_dir: Path, tmp_path_factory, monkeypatch) -> None:
-    on_path = tmp_path_factory.mktemp("path") / "notepad.exe"
-    on_path.write_text("", encoding="utf-8")
-    seen: list[str] = []
-
-    def fake_which(name: str) -> str | None:
-        seen.append(name)
-        return str(on_path)
-
-    monkeypatch.setattr(config_module.shutil, "which", fake_which)
-    assert launch_path(load(write(cfg_dir, BARE))) == on_path
-    assert seen == ["notepad.exe"]
+def fake_notepad(folder: Path) -> Path:
+    exe = folder / "notepad.exe"
+    exe.write_text("", encoding="utf-8")
+    return exe
 
 
-def test_bare_name_in_the_config_folder_wins_over_path(cfg_dir: Path, monkeypatch) -> None:
-    (cfg_dir / "notepad.exe").write_text("", encoding="utf-8")
-    monkeypatch.setattr(config_module.shutil, "which", lambda name: pytest.fail("PATH searched"))
-    assert launch_path(load(write(cfg_dir, BARE))) == cfg_dir / "notepad.exe"
+@pytest.fixture
+def bare_env(tmp_path_factory, monkeypatch) -> SimpleNamespace:
+    """An empty cwd and a one-folder PATH, both outside the config folder.
+
+    Claude Code sessions export NoDefaultCurrentDirectoryInExePath=1, which alone stops
+    shutil.which from searching the cwd; the app started normally does not have it.
+    """
+    cwd = tmp_path_factory.mktemp("cwd")
+    on_path = tmp_path_factory.mktemp("on_path")
+    monkeypatch.delenv("NoDefaultCurrentDirectoryInExePath", raising=False)
+    monkeypatch.chdir(cwd)
+    monkeypatch.setenv("PATH", str(on_path))
+    return SimpleNamespace(cwd=cwd, on_path=on_path)
 
 
-def test_bare_name_found_nowhere_is_refused(cfg_dir: Path, monkeypatch) -> None:
-    monkeypatch.setattr(config_module.shutil, "which", lambda name: None)
+def test_bare_name_found_on_path(cfg_dir: Path, bare_env: SimpleNamespace) -> None:
+    exe = fake_notepad(bare_env.on_path)
+    assert launch_path(load(write(cfg_dir, BARE))) == exe
+
+
+def test_bare_name_in_the_config_folder_wins_over_path(
+    cfg_dir: Path, bare_env: SimpleNamespace
+) -> None:
+    fake_notepad(bare_env.on_path)
+    in_config_folder = fake_notepad(cfg_dir)
+    assert launch_path(load(write(cfg_dir, BARE))) == in_config_folder
+
+
+def test_bare_name_in_the_current_directory_is_never_chosen(
+    cfg_dir: Path, bare_env: SimpleNamespace
+) -> None:
+    fake_notepad(bare_env.cwd)  # would shadow the real one if the cwd were searched
+    exe = fake_notepad(bare_env.on_path)
+    assert launch_path(load(write(cfg_dir, BARE))) == exe
+
+
+def test_bare_name_only_in_the_current_directory_is_refused(
+    cfg_dir: Path, bare_env: SimpleNamespace, monkeypatch
+) -> None:
+    fake_notepad(bare_env.cwd)
+    monkeypatch.setenv("PATH", os.pathsep.join([str(bare_env.on_path), ".", ""]))
+    [problem] = problems(write(cfg_dir, BARE))
+    assert problem.endswith("notepad.exe nor on PATH")
+
+
+def test_bare_name_found_nowhere_is_refused(cfg_dir: Path, bare_env: SimpleNamespace) -> None:
     [problem] = problems(write(cfg_dir, BARE))
     assert problem.endswith("notepad.exe nor on PATH")
 

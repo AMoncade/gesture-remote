@@ -478,10 +478,11 @@ def _resolve_launch_path(raw: Path, base_dir: Path) -> tuple[Path | None, str | 
     """Expand %VAR%, then resolve like the other paths; a bare name may also come from PATH.
 
     Decision for bare names such as `notepad.exe` (no folder part): the config folder is tried
-    first, like every relative path, then `shutil.which` (PATH and PATHEXT). The found path is
-    stored absolute, so the launch handler gets the same absolute contract for every `path`.
-    Programs registered only under "App Paths" (found by the Run box but not on PATH) are refused
-    here: use `app:` (Start-menu name) or an absolute path for them.
+    first, like every relative path, then the absolute PATH entries (with PATHEXT), never the
+    current directory (see `_which_on_path`). The found path is stored absolute, so the launch
+    handler gets the same absolute contract for every `path`. Programs registered only under
+    "App Paths" (found by the Run box but not on PATH) are refused here: use `app:` (Start-menu
+    name) or an absolute path for them.
     """
     text = os.path.expandvars(str(raw))
     undefined = _UNEXPANDED_VAR.search(text)
@@ -494,13 +495,31 @@ def _resolve_launch_path(raw: Path, base_dir: Path) -> tuple[Path | None, str | 
     target = _absolute(candidate, base_dir)
     bare = not candidate.is_absolute() and len(candidate.parts) == 1
     if not target.exists() and bare:
-        found = shutil.which(text)
+        found = _which_on_path(text)
         if found is not None:
-            target = Path(found)
+            target = found
     if not target.exists():
         where = " nor on PATH" if bare else ""
         return None, f"launch path not found: {target}{where}"
     return target, None
+
+
+def _which_on_path(name: str) -> Path | None:
+    """Look `name` up in the absolute PATH entries only, honouring PATHEXT.
+
+    Plain `shutil.which(name)` on Windows searches the current directory first (even with an
+    explicit `path=`), so a notepad.exe lying in the folder the app was started from would win
+    over the one in system32. Giving `which` a directory part turns that search off; relative
+    PATH entries (".", "bin") are skipped for the same reason.
+    """
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        folder = Path(entry.strip('"'))
+        if not entry or not folder.is_absolute():
+            continue
+        found = shutil.which(str(folder / name))
+        if found is not None:
+            return Path(found)
+    return None
 
 
 # --- hot reload -----------------------------------------------------------------------------
