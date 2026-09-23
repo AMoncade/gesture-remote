@@ -59,12 +59,13 @@ class FakeStartMenu:
         raise AppResolutionError(f"no Start-menu app named {name!r}; did you mean 'Apple Music'?")
 
 
-def load(path: Path, start_menu: FakeStartMenu | None = None) -> Config:
+def load(path: Path, start_menu: FakeStartMenu | None = None, **options: bool) -> Config:
     return load_config(
         path,
         labels=LABELS,
         is_valid_key=pyautogui.isValidKey,
         resolve_app=start_menu or FakeStartMenu(),
+        **options,
     )
 
 
@@ -94,7 +95,8 @@ def problems(path: Path) -> tuple[str, ...]:
 def test_shipped_config_loads_with_the_real_key_check(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)  # paths must come from the config folder, not the cwd
     start_menu = FakeStartMenu()
-    config = load(REPO_ROOT / "config.yaml", start_menu)
+    # As on a fresh clone: no custom model, so the custom bindings (ok, trois) are skipped.
+    config = load(REPO_ROOT / "config.yaml", start_menu, skip_unknown_bindings=True)
 
     assert set(config.bindings) == {
         "open_palm",

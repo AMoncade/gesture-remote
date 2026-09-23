@@ -577,12 +577,34 @@ def test_a_custom_model_makes_its_gestures_bindable(config_file: Path, tmp_path:
     assert "rock" in app.recognizer.labels and "victory" in app.recognizer.labels
 
 
-def test_without_a_custom_model_its_gestures_are_refused(config_file: Path, tmp_path: Path) -> None:
+def test_without_a_custom_model_its_bindings_are_skipped(
+    config_file: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     config_file.write_text(
         config_file.read_text(encoding="utf-8") + "  rock: { type: keys, keys: [playpause] }\n",
         encoding="utf-8",
     )
-    with pytest.raises(ConfigError, match="rock"):
+    app, _ = build(config_file, tmp_path)  # a fresh clone must still start
+    assert "rock" not in app.store.config.bindings
+    assert "victory" in app.store.config.bindings
+    assert "bindings.rock: 'rock' is not a known gesture" in caplog.text
+
+
+def test_with_a_custom_model_an_unknown_label_is_still_refused(
+    config_file: Path, tmp_path: Path
+) -> None:
+    from sklearn.ensemble import RandomForestClassifier
+
+    from gesture_remote.custom import CustomModel
+
+    features = np.vstack([np.zeros((4, 63)), np.ones((4, 63))])
+    classifier = RandomForestClassifier(n_estimators=3).fit(features, ["none"] * 4 + ["rock"] * 4)
+    CustomModel(classifier).save(tmp_path / "models" / "custom_gestures.joblib")
+    config_file.write_text(
+        config_file.read_text(encoding="utf-8") + "  rokc: { type: keys, keys: [playpause] }\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="rokc"):  # a typo is not silently skipped
         build(config_file, tmp_path)
 
 

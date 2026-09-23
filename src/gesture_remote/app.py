@@ -451,6 +451,7 @@ def build_app(
         labels=labels,
         is_valid_key=is_valid_key,
         resolve_app=index.resolve,
+        skip_unknown_bindings=custom is None,  # fresh clone / not trained yet: still start
     )
     store = ConfigStore(config_path, load)
     settings = store.config.settings

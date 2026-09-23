@@ -429,7 +429,14 @@ def test_bare_launch_path_from_path_reaches_startfile_absolute(tmp_path: Path) -
 def test_shipped_config_fires_every_binding_through_the_real_dispatcher(tmp_path: Path) -> None:
     """recognition -> engine -> dispatcher -> handlers, with config.yaml as shipped."""
     powershell = PowerShell(("Apple Music", APPLE_MUSIC_ID), ("Calculator", "calc!App"))
-    config, index = load(REPO_ROOT / "config.yaml", powershell)
+    index = StartAppsIndex(powershell)
+    config = load_config(  # as on a fresh clone: no custom model, custom bindings skipped
+        REPO_ROOT / "config.yaml",
+        labels=CANNED_LABEL_SET,
+        is_valid_key=valid_key,
+        resolve_app=index.resolve,
+        skip_unknown_bindings=True,
+    )
     presser, open_tab, run, popen = FakePresser(), Recorder(), Recorder(), FakePopen()
     scripts = ScriptRunner(tmp_path / "logs", popen=popen, python="py.exe")
     handlers = default_handlers(

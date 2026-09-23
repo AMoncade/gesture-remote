@@ -262,10 +262,14 @@ def load_config(
     labels: frozenset[str],
     is_valid_key: Callable[[str], bool],
     resolve_app: Callable[[str], str],
+    skip_unknown_bindings: bool = False,
 ) -> Config:
     """Read, validate and resolve a config file; raise ConfigError listing every problem.
 
     - `labels`: every label the recognizer can emit (`Recognizer.labels`), `none` included.
+    - `skip_unknown_bindings`: when no custom model exists (fresh clone, not trained yet), a
+      binding to an unknown label is logged and dropped instead of refusing the whole file.
+      With a custom model, an unknown label is still an error (typo protection).
     - `is_valid_key`: `pyautogui.isValidKey` in production (pyautogui ignores unknown names).
     - `resolve_app`: Start-menu name -> AppID, raising AppResolutionError. Called to validate
       only: `launch.app` is returned as written and the launch handler resolves it again.
@@ -297,6 +301,7 @@ def load_config(
         labels=labels,
         is_valid_key=is_valid_key,
         resolve_app=resolve_app,
+        skip_unknown_bindings=skip_unknown_bindings,
     )
     problems.extend(late)
     if problems:
@@ -370,6 +375,7 @@ def _check_in_context(
     labels: frozenset[str],
     is_valid_key: Callable[[str], bool],
     resolve_app: Callable[[str], str],
+    skip_unknown_bindings: bool = False,
 ) -> tuple[Config, list[str]]:
     """Checks that need the recognizer, pyautogui, the Start menu or the file system.
 
@@ -404,6 +410,14 @@ def _check_in_context(
         if label == NONE_LABEL:
             problems.append(f"{where}: {NONE_LABEL!r} means 'no known gesture' and cannot be bound")
         elif label not in labels:
+            if skip_unknown_bindings:
+                logger.warning(
+                    "%s: %r is not a known gesture and there is no custom model "
+                    "(tools/train.py): binding skipped",
+                    where,
+                    label,
+                )
+                continue
             problems.append(f"{where}: {_unknown_label(label, labels)}")
         elif label == arm:
             problems.append(
