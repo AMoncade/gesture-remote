@@ -598,9 +598,18 @@ def test_store_flags_camera_and_recognition_changes_as_needing_a_restart(
     assert reload.restart_required == ("camera", "recognition")
     assert any("restart required" in record.getMessage() for record in caplog.records)
 
+    # Compared with the startup config (what is actually running), not with the previous one:
+    # still different from startup, so still a restart to do...
     scripted.write("settings: {camera: {index: 1}, recognition: {num_hands: 2}}\n" + PALM_MUTES)
     [reload] = [result for result in ticks(store, clock, 3) if result is not None]
+    assert reload.restart_required == ("camera", "recognition")
+
+    # ...and back to the startup values, nothing to restart and no warning.
+    caplog.clear()
+    scripted.write(PALM_PLAYS)
+    [reload] = [result for result in ticks(store, clock, 3) if result is not None]
     assert reload.restart_required == ()
+    assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
 
 
 def test_store_refuses_to_start_on_an_invalid_file(store_parts, clock: FakeClock) -> None:
