@@ -107,6 +107,11 @@ on the same landmarks.
   `>` writes UTF-16).
 - `core.autocrlf=true` comes from the **system** gitconfig: working files are CRLF; normalise line
   endings before any text replacement.
+- **Worktree import isolation is proven** (2026-09-23, at 6b19ef7, from `gesture-remote-vision`):
+  with `pythonpath = ["src"]` the package is imported from the worktree; with
+  `pytest -o pythonpath=` it falls back to main's `src/` through the editable `.pth` and
+  `conftest.py` aborts with `UsageError` (exit 4). `-p no:python_path` is **not** a control:
+  pytest 9 has no such plugin, so it disables nothing and the suite stays green.
 - Never run `pip install` in the background of a session that may close: an interrupted install
   filled 508 `.py` files with NUL bytes.
 
