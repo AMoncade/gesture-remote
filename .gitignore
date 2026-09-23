@@ -1,0 +1,18 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# MediaPipe models and official sample images (tools/download_models.py fetches them)
+models/*.task
+models/samples/
+
+# Personal hand recordings (phase 2) and runtime logs: never committed
+data/
+logs/
+
+# IDE
+.idea/
