@@ -463,7 +463,10 @@ def build_app(
             [f"settings.recognition.model: cannot read {settings.recognition.model}: {error}"],
         ) from None
 
-    dispatcher = dispatcher_factory(log_dir=log_dir / "scripts", start_apps=index, dry_run=dry_run)
+    stop = threading.Event()  # set by the tray's Quit, Ctrl+C, or a `quit` gesture
+    dispatcher = dispatcher_factory(
+        log_dir=log_dir / "scripts", start_apps=index, dry_run=dry_run, on_quit=stop.set
+    )
     recognizer = recognizer_factory(model, settings.recognition)
     if custom is not None:
         recognizer = CustomGestureRecognizer(
@@ -489,4 +492,6 @@ def build_app(
         dry_run,
         debug,
     )
-    return App(pipeline, ConfigWatcher(store, reloads), store, dispatcher, recognizer, camera)
+    return App(
+        pipeline, ConfigWatcher(store, reloads), store, dispatcher, recognizer, camera, stop=stop
+    )

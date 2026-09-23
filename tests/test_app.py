@@ -608,6 +608,14 @@ def test_with_a_custom_model_an_unknown_label_is_still_refused(
         build(config_file, tmp_path)
 
 
+def test_the_quit_action_stops_the_app(config_file: Path, tmp_path: Path) -> None:
+    app, parts = build(config_file, tmp_path)
+    ((_, dispatcher_kwargs),) = parts["dispatcher"].calls
+    assert not app.stop.is_set()
+    dispatcher_kwargs["on_quit"]()  # what QuitHandler calls
+    assert app.stop.is_set()
+
+
 def test_build_app_shares_one_start_menu_index(config_file: Path, tmp_path: Path) -> None:
     app, parts = build(config_file, tmp_path)
     ((_, dispatcher_kwargs),) = parts["dispatcher"].calls

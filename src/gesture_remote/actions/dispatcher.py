@@ -30,9 +30,22 @@ from gesture_remote.config import (
     ActionSpec,
     KeysAction,
     LaunchAction,
+    QuitAction,
     ScriptAction,
     UrlAction,
 )
+
+
+class QuitHandler:
+    """Runs `on_quit` (the app sets its stop event): the app then shuts down cleanly."""
+
+    def __init__(self, on_quit: Callable[[], None]) -> None:
+        self._on_quit = on_quit
+
+    def __call__(self, action: QuitAction) -> None:
+        logger.info("quit requested by a gesture")
+        self._on_quit()
+
 
 logger = logging.getLogger(__name__)
 
@@ -83,27 +96,34 @@ def default_handlers(
     open_tab: OpenTab = webbrowser.open_new_tab,
     run: RunCommand = run_launcher,
     startfile: StartFile = os.startfile,
+    on_quit: Callable[[], None] = lambda: None,
 ) -> dict[type, Handler]:
     return {
         KeysAction: KeysHandler(presser),
         LaunchAction: LaunchHandler(resolve_app, run=run, startfile=startfile),
         UrlAction: UrlHandler(open_tab),
         ScriptAction: scripts,
+        QuitAction: QuitHandler(on_quit),
     }
 
 
 def build_dispatcher(
-    *, log_dir: Path, start_apps: StartAppsIndex, dry_run: bool = False
+    *,
+    log_dir: Path,
+    start_apps: StartAppsIndex,
+    dry_run: bool = False,
+    on_quit: Callable[[], None] = lambda: None,
 ) -> ActionDispatcher:
     """Real dispatcher. Pass the same StartAppsIndex whose `resolve` the config loader uses.
 
-    `log_dir` is the scripts log folder (logs/scripts).
+    `log_dir` is the scripts log folder (logs/scripts); `on_quit` stops the app (quit action).
     """
     return ActionDispatcher(
         default_handlers(
             presser=PyAutoGuiPresser(),
             resolve_app=start_apps.resolve,
             scripts=ScriptRunner(log_dir),
+            on_quit=on_quit,
         ),
         dry_run=dry_run,
     )

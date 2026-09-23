@@ -438,6 +438,7 @@ def test_shipped_config_fires_every_binding_through_the_real_dispatcher(tmp_path
         skip_unknown_bindings=True,
     )
     presser, open_tab, run, popen = FakePresser(), Recorder(), Recorder(), FakePopen()
+    quits = Recorder()
     scripts = ScriptRunner(tmp_path / "logs", popen=popen, python="py.exe")
     handlers = default_handlers(
         presser=presser,
@@ -446,12 +447,13 @@ def test_shipped_config_fires_every_binding_through_the_real_dispatcher(tmp_path
         open_tab=open_tab,
         run=run,
         startfile=Recorder(),
+        on_quit=quits,
     )
     dispatcher = ActionDispatcher(handlers)
 
     feed = Feed(GestureEngine(config.settings.engine, config.bindings, now=0.0))
     for label in config.bindings:
-        feed.gesture(label, 12)
+        feed.gesture(label, 16)  # victory (quit) needs 15 stable frames
         feed.rest(1.2)  # longer than release_s and cooldown_s
     fired = [event for event in feed.events if isinstance(event, Triggered)]
     assert [event.label for event in fired] == list(config.bindings)
@@ -468,7 +470,8 @@ def test_shipped_config_fires_every_binding_through_the_real_dispatcher(tmp_path
         dispatcher.close()
     assert len(presser.chords) == 4, "the worker did not reach the last action"
     assert presser.chords == [("playpause",), ("volumeup",), ("volumemute",), ("playpause",)]
-    assert open_tab.calls == [(("https://studium.umontreal.ca",), {})]
+    assert open_tab.calls == []  # victory now quits the app
+    assert quits.calls == [((), {})]
     assert run.calls == [((["explorer.exe", "shell:AppsFolder\\" + APPLE_MUSIC_ID],), {})]
     assert popen.argvs == [["py.exe", str(REPO_ROOT / "macros" / "example_hello.py")]]
     assert powershell.calls == 1
@@ -767,7 +770,9 @@ def test_build_app_shares_the_index_and_keeps_running_scripts_across_a_real_relo
     )
     made: list[tuple[StartAppsIndex, ActionDispatcher]] = []
 
-    def dispatcher_factory(*, log_dir: Path, start_apps: StartAppsIndex, dry_run: bool) -> Any:
+    def dispatcher_factory(
+        *, log_dir: Path, start_apps: StartAppsIndex, dry_run: bool, on_quit: Any
+    ) -> Any:
         dispatcher = ActionDispatcher(
             default_handlers(
                 presser=FakePresser(),

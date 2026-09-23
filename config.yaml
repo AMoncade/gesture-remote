@@ -10,12 +10,12 @@ settings:
     repeat_interval_s: 0.2
     arm_gesture: i_love_you
     start_armed: true
-    per_gesture: { i_love_you: { stable_frames: 15 } }
+    per_gesture: { i_love_you: { stable_frames: 15 }, victory: { stable_frames: 15 } }
   idle:     { fps: 5, after_s: 1.0 }
   feedback: { sound: true }
 bindings:
   open_palm:   { type: keys,   keys: [playpause] }
-  victory:     { type: url,    url: "https://studium.umontreal.ca" }
+  victory:     { type: quit }   # ✌️ closes gesture-remote (held a bit longer, see per_gesture)
   pointing_up: { type: launch, app: "Apple Music" }
   thumb_down:  { type: script, path: macros/example_hello.py }
   thumb_up:    { type: keys,   keys: [volumeup], repeat_while_held: true }

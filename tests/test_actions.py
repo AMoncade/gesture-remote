@@ -26,6 +26,7 @@ from gesture_remote.actions import (
 from gesture_remote.config import (
     KeysAction,
     LaunchAction,
+    QuitAction,
     ScriptAction,
     UrlAction,
 )
@@ -347,8 +348,20 @@ def run_all(handlers: dict[type, Any], actions: list[Any]) -> None:
 
 
 def test_every_action_type_has_a_handler() -> None:
-    assert set(ACTION_TYPES) == {KeysAction, LaunchAction, UrlAction, ScriptAction}
+    assert set(ACTION_TYPES) == {KeysAction, LaunchAction, UrlAction, ScriptAction, QuitAction}
     assert set(fake_handlers()) == set(ACTION_TYPES)
+
+
+def test_quit_action_calls_on_quit() -> None:
+    quits = Recorder()
+    handlers = default_handlers(
+        presser=FakePresser(),
+        resolve_app=lambda name: "x!App",
+        scripts=ScriptRunner(Path("unused"), popen=FakePopen()),
+        on_quit=quits,
+    )
+    handlers[QuitAction](QuitAction(type="quit"))
+    assert quits.calls == [((), {})]
 
 
 def test_dispatcher_refuses_an_incomplete_registry() -> None:

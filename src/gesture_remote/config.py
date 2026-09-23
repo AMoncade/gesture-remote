@@ -181,8 +181,14 @@ class ScriptAction(_Strict):
         return path
 
 
+class QuitAction(_Strict):
+    """Stop gesture-remote itself (camera released, tray icon removed)."""
+
+    type: Literal["quit"]
+
+
 ActionSpec = Annotated[
-    KeysAction | LaunchAction | UrlAction | ScriptAction,
+    KeysAction | LaunchAction | UrlAction | ScriptAction | QuitAction,
     Field(discriminator="type"),
 ]
 """Every action type. Adding one = model here + handler in actions/ + exhaustiveness test."""
@@ -476,6 +482,8 @@ def _check_action(
             if not script.is_file():
                 return action, [f"script not found: {script}"]
             return action.model_copy(update={"path": script}), []
+        case QuitAction():
+            return action, []
         case _:
             assert_never(action)
 
