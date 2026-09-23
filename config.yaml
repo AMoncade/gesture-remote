@@ -17,10 +17,8 @@ bindings:
   open_palm:   { type: url,    url: "https://studium.umontreal.ca" }
   victory:     { type: quit }   # ✌️ closes gesture-remote (held a bit longer, see per_gesture)
   pointing_up: { type: launch, app: "Apple Music" }
-  thumb_down:  { type: script, path: macros/example_hello.py }
-  thumb_up:    { type: keys,   keys: [volumeup], repeat_while_held: true }
   closed_fist: { type: keys,   keys: [volumemute] }
   # your own gestures (tools/record.py + tools/train.py)
-  ok:          { type: url,    url: "https://www.youtube.com" }
-  trois:       { type: launch, path: notepad.exe }
   call_me:     { type: script, path: macros/claude_setup.py }   # 4 terminal tabs with claude + Claude app
+  # Recognised but bound to nothing (they only log "IGNORED ... unmapped"):
+  # thumb_down, thumb_up, ok, trois. Add a line here to give one an action.

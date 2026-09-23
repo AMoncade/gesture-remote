@@ -95,28 +95,30 @@ def problems(path: Path) -> tuple[str, ...]:
 def test_shipped_config_loads_with_the_real_key_check(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)  # paths must come from the config folder, not the cwd
     start_menu = FakeStartMenu()
-    # As on a fresh clone: no custom model, so the custom bindings (ok, trois) are skipped.
+    # As on a fresh clone: no custom model, so the custom binding (call_me) is skipped.
     config = load(REPO_ROOT / "config.yaml", start_menu, skip_unknown_bindings=True)
 
-    assert set(config.bindings) == {
-        "open_palm",
-        "victory",
-        "pointing_up",
-        "thumb_down",
-        "thumb_up",
-        "closed_fist",
-    }
-    assert config.bindings["thumb_down"] == ScriptAction(
-        type="script", path=REPO_ROOT / "macros" / "example_hello.py"
-    )
+    assert set(config.bindings) == {"open_palm", "victory", "pointing_up", "closed_fist"}
     assert config.settings.recognition.model == REPO_ROOT / "models" / "gesture_recognizer.task"
     # app: is validated through resolve_app but kept as written (lot C resolves it again).
     assert config.bindings["pointing_up"] == LaunchAction(type="launch", app="Apple Music")
     assert start_menu.calls == ["Apple Music"]
-    assert config.bindings["thumb_up"] == KeysAction(
-        type="keys", keys=["volumeup"], repeat_while_held=True
-    )
+    assert config.bindings["closed_fist"] == KeysAction(type="keys", keys=["volumemute"])
     assert config.settings.engine.per_gesture["i_love_you"].stable_frames == 15
+
+
+def test_shipped_config_script_paths_are_absolute(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    labels = LABELS | {"call_me"}  # as with the user's custom model
+    config = load_config(
+        REPO_ROOT / "config.yaml",
+        labels=labels,
+        is_valid_key=pyautogui.isValidKey,
+        resolve_app=FakeStartMenu(),
+    )
+    assert config.bindings["call_me"] == ScriptAction(
+        type="script", path=REPO_ROOT / "macros" / "claude_setup.py"
+    )
 
 
 # --- every refusal has its message ----------------------------------------------------------

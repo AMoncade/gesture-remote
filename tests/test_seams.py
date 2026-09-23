@@ -464,19 +464,17 @@ def test_shipped_config_fires_every_binding_through_the_real_dispatcher(tmp_path
         # (close() would drop whatever is still queued.)
         dispatcher.dispatch(config.bindings["closed_fist"])
         deadline = time.monotonic() + WAIT_S
-        while len(presser.chords) < 3 and time.monotonic() < deadline:
+        while len(presser.chords) < 2 and time.monotonic() < deadline:
             time.sleep(0.01)
     finally:
         dispatcher.close()
-    assert len(presser.chords) == 3, "the worker did not reach the last action"
-    assert presser.chords == [("volumeup",), ("volumemute",), ("volumemute",)]
+    assert len(presser.chords) == 2, "the worker did not reach the last action"
+    assert presser.chords == [("volumemute",), ("volumemute",)]
     assert open_tab.calls == [(("https://studium.umontreal.ca",), {})]  # open palm
     assert quits.calls == [((), {})]
     assert run.calls == [((["explorer.exe", "shell:AppsFolder\\" + APPLE_MUSIC_ID],), {})]
-    assert popen.argvs == [["py.exe", str(REPO_ROOT / "macros" / "example_hello.py")]]
+    assert popen.argvs == []  # call_me is a custom gesture: skipped without a custom model
     assert powershell.calls == 1
-    popen.processes[0].finish()
-    assert scripts.wait_idle(WAIT_S)
 
 
 # --- 7. engine state across a config reload -------------------------------------------------
