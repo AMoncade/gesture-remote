@@ -112,6 +112,19 @@ on the same landmarks.
   `pytest -o pythonpath=` it falls back to main's `src/` through the editable `.pth` and
   `conftest.py` aborts with `UsageError` (exit 4). `-p no:python_path` is **not** a control:
   pytest 9 has no such plugin, so it disables nothing and the suite stays green.
+- **`mp.Image` ignores numpy strides and does not raise**: a view like `rgb[:, ::-1]` is read as
+  the original image, and `bgr[..., ::-1]` is read as BGR (victory → `None` 0.88). Convert with
+  `cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)`; the recognizer also forces
+  `np.ascontiguousarray` (lot A probes, pinned by `test_mirrored_view_is_read_as_mirrored`).
+- **VIDEO mode tracks from the previous ROI**: a hard cut to an unrelated image gives "no hand" on
+  the first frame, then the right label (lot A probe on the sample images).
+- **Claude Code sessions export `PYTHONIOENCODING=utf-8:surrogateescape`** (not set in the user or
+  machine registry; ANSI code page 1252). Any test that relies on a child Python's encoding passes
+  inside a Claude session regardless: remove `PYTHONIOENCODING`/`PYTHONUTF8` with `monkeypatch`
+  in such tests (lot C found it; `test_actions` does it).
+- `os.startfile(exe, arguments=subprocess.list2cmdline(args))` round-trips spaces, quotes,
+  trailing `\`, `""` and accents for MSVCRT-parsed programs; `.bat`/custom parsers may differ
+  (lot C probe, not a test).
 - Never run `pip install` in the background of a session that may close: an interrupted install
   filled 508 `.py` files with NUL bytes.
 
@@ -139,10 +152,22 @@ Exclusive resources, brokered by the admin: the **camera** (only the admin opens
 **keyboard** (no test sends a real key), no test launches a real app or URL — except the real
 subprocess of the script test (in `tmp_path`) and a read-only `Get-StartApps` (`integration`).
 
+## Round 2 — ownership (after lots A and C landed)
+
+| Tree | Branch | Owner | Owns |
+|---|---|---|---|
+| `C:\Users\adrie\gesture-remote-app` | `lot/app` | session A | `app.py`, `__main__.py`, `debug_view.py`, `logging_setup.py`, `test_app.py`, `test_debug_view.py`, `test_logging_setup.py` |
+| `C:\Users\adrie\gesture-remote-actions` | `lot/actions` | session C | `actions/*`, `feedback.py` and their tests (follow-ups only) |
+| `C:\Users\adrie\gesture-remote-decision` | `lot/decision` | session B | unchanged from round 1 |
+
+Lot A's and lot C's round-1 files are now on `main`; changes to them go through their owner
+(A: vision files, C: actions files).
+
 ## Progress
 
 - [x] Step 0 — skeleton, gates (a) models, (b) camera, (c) Start menu — see SHA of the commit
       adding this file.
-- [ ] Steps 1–4 — lots A, B, C.
+- [ ] Steps 1–4 — lot A landed `fd5e159`, lot C landed `d3e6e5c` (103 passed, 0 skipped on
+      main at `d3e6e5c`); lot B pending.
 - [ ] Step 5 — `recognition` wiring, `app.py`, `__main__.py`, `debug_view.py`, `logging_setup.py`.
 - [ ] Step 6 — measurements and tuning with the user; phase 1 ✅ + SHA.
