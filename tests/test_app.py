@@ -663,20 +663,35 @@ def test_a_slow_store_never_stalls_the_vision_loop(clock: FakeClock) -> None:
     assert times[-1] - times[0] < 0.4  # while the watcher was blocked 0.5 s in each poll
 
 
-@pytest.mark.usefixtures("restore_root_logger")
-def test_cli_start_menu_failure_exits_3_with_a_clear_message(
-    config_file: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _powershell_fails() -> bytes:
     import subprocess
 
+    raise subprocess.CalledProcessError(1, ["powershell", "Get-StartApps"])
+
+
+def _powershell_prints_garbage() -> bytes:
+    return b"Get-StartApps : le terme n'est pas reconnu"
+
+
+@pytest.mark.usefixtures("restore_root_logger")
+@pytest.mark.parametrize(
+    ("runner", "error_name"),
+    [(_powershell_fails, "CalledProcessError"), (_powershell_prints_garbage, "JSONDecodeError")],
+    ids=["powershell fails", "not json"],
+)
+def test_cli_start_menu_failure_exits_3_with_a_clear_message(
+    config_file: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    runner: Callable[[], bytes],
+    error_name: str,
+) -> None:
     from gesture_remote import app as app_module
 
-    def failing_runner() -> bytes:
-        raise subprocess.CalledProcessError(1, ["powershell", "Get-StartApps"])
-
-    monkeypatch.setattr(app_module, "StartAppsIndex", lambda: StartAppsIndex(failing_runner))
+    monkeypatch.setattr(app_module, "StartAppsIndex", lambda: StartAppsIndex(runner))
     assert entry.main(["--config", str(config_file)], log_dir=tmp_path / "logs") == 3
     for handler in logging.getLogger().handlers:
         handler.flush()
     text = (tmp_path / "logs" / "gesture-remote.log").read_text(encoding="utf-8")
-    assert "startup failed while validating" in text and "CalledProcessError" in text
+    assert "startup failed while validating" in text and error_name in text
+    assert "Traceback" not in text
