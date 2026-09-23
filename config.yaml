@@ -23,4 +23,4 @@ bindings:
   # your own gestures (tools/record.py + tools/train.py)
   ok:          { type: url,    url: "https://www.youtube.com" }
   trois:       { type: launch, path: notepad.exe }
-  call_me:     { type: launch, app: "Calculator" }
+  call_me:     { type: script, path: macros/claude_setup.py }   # 4 terminal tabs with claude + Claude app
