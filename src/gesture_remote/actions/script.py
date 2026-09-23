@@ -32,6 +32,14 @@ class Process(Protocol):
 Popen = Callable[..., Process]
 """subprocess.Popen-compatible."""
 
+CHILD_ENV = {
+    "PYTHONUTF8": "1",
+    # A user-level PYTHONIOENCODING (e.g. cp1252) would win over PYTHONUTF8 for stdout.
+    "PYTHONIOENCODING": "utf-8",
+    # Without it, the output of a script that hangs would never reach its log.
+    "PYTHONUNBUFFERED": "1",
+}
+
 
 class ScriptRunner:
     def __init__(
@@ -75,7 +83,7 @@ class ScriptRunner:
                     stdin=subprocess.DEVNULL,
                     stdout=log_file,
                     stderr=subprocess.STDOUT,
-                    env={**os.environ, "PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"},
+                    env={**os.environ, **CHILD_ENV},
                     creationflags=subprocess.CREATE_NO_WINDOW,
                 )
             except BaseException:

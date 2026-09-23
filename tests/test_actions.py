@@ -197,6 +197,7 @@ def test_script_argv_cwd_flags_and_environment(
     assert kwargs["stdin"] == subprocess.DEVNULL
     assert kwargs["env"]["PYTHONUTF8"] == "1"
     assert kwargs["env"]["PYTHONUNBUFFERED"] == "1"
+    assert kwargs["env"]["PYTHONIOENCODING"] == "utf-8"
     assert kwargs["env"]["PATH"] == os.environ["PATH"]
     assert Path(kwargs["stdout"].name) == tmp_path / "logs" / "scripts" / "macro.log"
     popen.processes[0].finish()
@@ -299,6 +300,20 @@ def test_real_subprocess_writes_utf8_output_to_the_log(
     assert runner.wait_idle(WAIT_S), "the mini script did not end"
     log = (tmp_path / "logs" / "scripts" / "macro.log").read_bytes().decode("utf-8")
     assert f"é {script.parent}" in log
+
+
+def test_real_subprocess_ignores_a_hostile_pythonioencoding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # PYTHONIOENCODING wins over PYTHONUTF8 for stdout: the runner must override it too.
+    monkeypatch.setenv("PYTHONIOENCODING", "cp1252")
+    monkeypatch.delenv("PYTHONUTF8", raising=False)
+    script = make_script(tmp_path / "macros", body="print('é')\n")
+    runner = ScriptRunner(tmp_path / "logs" / "scripts")
+    runner(ScriptAction(type="script", path=script))
+    assert runner.wait_idle(WAIT_S), "the mini script did not end"
+    log = (tmp_path / "logs" / "scripts" / "macro.log").read_bytes().decode("utf-8")
+    assert "é" in log
 
 
 # --- dispatcher -----------------------------------------------------------------------------
