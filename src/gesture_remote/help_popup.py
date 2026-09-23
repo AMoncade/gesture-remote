@@ -10,8 +10,10 @@ from __future__ import annotations
 import contextlib
 import logging
 import threading
-from typing import assert_never
+from typing import Protocol, assert_never
 from urllib.parse import urlsplit
+
+import numpy as np
 
 from gesture_remote.config import (
     ActionSpec,
@@ -84,24 +86,36 @@ def help_rows(config: Config) -> list[tuple[str, str]]:
     return rows
 
 
-def show_help(config: Config) -> None:
-    """Open the card on its own thread; does nothing if one is already open."""
+class PreviewSource(Protocol):
+    """What the popup needs from the pipeline to show the camera (app.Pipeline has both)."""
+
+    preview_wanted: bool
+    latest_preview: np.ndarray | None
+
+
+def show_help(config: Config, preview: PreviewSource | None = None) -> None:
+    """Open the card on its own thread; does nothing if one is already open.
+
+    With `preview`, the card has a "Voir la caméra" button showing the live debug image.
+    """
     if not _open.acquire(blocking=False):
         return
     rows = help_rows(config)
 
     def run() -> None:
         try:
-            _window(rows)
+            _window(rows, preview)
         except Exception:  # a broken popup must never take the app down
             logger.exception("gestures popup failed")
         finally:
+            if preview is not None:
+                preview.preview_wanted = False  # stop drawing frames nobody looks at
             _open.release()
 
     threading.Thread(target=run, name="help-popup", daemon=True).start()
 
 
-def _window(rows: list[tuple[str, str]]) -> None:
+def _window(rows: list[tuple[str, str]], preview: PreviewSource | None) -> None:
     import ctypes
     import tkinter as tk
 
@@ -151,8 +165,65 @@ def _window(rows: list[tuple[str, str]]) -> None:
 
     root.update_idletasks()
     width = max(round(WIDTH * scale), root.winfo_reqwidth())
-    height = root.winfo_reqheight()
-    x = root.winfo_screenwidth() - width - round(16 * scale)
-    y = root.winfo_screenheight() - height - round(64 * scale)  # above the taskbar
-    root.geometry(f"{width}x{height}+{x}+{y}")
+
+    def place() -> None:
+        """Bottom-right corner, above the taskbar; called again when the height changes."""
+        root.update_idletasks()
+        height = root.winfo_reqheight()
+        x = root.winfo_screenwidth() - width - round(16 * scale)
+        y = root.winfo_screenheight() - height - round(64 * scale)
+        root.geometry(f"{width}x{height}+{x}+{y}")
+
+    if preview is not None:
+        _camera_preview(root, preview, width - round(24 * scale), place)
+    place()
     root.mainloop()
+
+
+def _camera_preview(root, preview: PreviewSource, image_width: int, relayout) -> None:
+    """A button that shows or hides the live debug image under the list (~15 fps)."""
+    import tkinter as tk
+
+    from PIL import Image, ImageTk
+
+    image_height = image_width * 3 // 4
+    screen = tk.Label(root, bg="black", bd=0)
+    shown: list = [None]  # keeps the PhotoImage alive: Tk only holds a weak reference
+
+    def refresh() -> None:
+        if not preview.preview_wanted:
+            return
+        frame = preview.latest_preview
+        if frame is not None:
+            rgb = np.ascontiguousarray(frame[..., ::-1])  # BGR -> RGB, memory only
+            picture = Image.fromarray(rgb).resize((image_width, image_height))
+            shown[0] = ImageTk.PhotoImage(picture)
+            screen.configure(image=shown[0])
+        root.after(66, refresh)
+
+    def toggle() -> None:
+        preview.preview_wanted = not preview.preview_wanted
+        if preview.preview_wanted:
+            button.configure(text="📷  Cacher la caméra")
+            screen.configure(image="", width=image_width, height=image_height)
+            screen.pack(padx=12, pady=(0, 10), before=button)
+            refresh()
+        else:
+            button.configure(text="📷  Voir la caméra")
+            screen.pack_forget()
+            preview.latest_preview = None
+        relayout()
+
+    button = tk.Label(
+        root,
+        text="📷  Voir la caméra",
+        bg=ROW_BACKGROUND,
+        fg=TEXT,
+        font=("Segoe UI", 10),
+        cursor="hand2",
+        pady=5,
+    )
+    button.pack(fill="x", padx=12, pady=(0, 10))
+    button.bind("<Button-1>", lambda _event: toggle())
+    button.bind("<Enter>", lambda _event: button.configure(bg=ACCENT))
+    button.bind("<Leave>", lambda _event: button.configure(bg=ROW_BACKGROUND))

@@ -461,6 +461,18 @@ def test_tray_mode_opens_and_hides_the_window_at_run_time(clock: FakeClock) -> N
     assert views[1].closed and rig.pipeline.show_view is False
 
 
+def test_the_popup_preview_is_drawn_only_while_wanted(clock: FakeClock) -> None:
+    rig = Rig(clock)
+    rig.recognizer.current = "victory"
+    rig.pipeline.step()
+    assert rig.pipeline.latest_preview is None  # nobody looks: nothing drawn
+    rig.pipeline.preview_wanted = True
+    rig.pipeline.step()
+    image = rig.pipeline.latest_preview
+    assert image is not None and image.shape == rig.camera.frame.shape
+    assert not np.array_equal(image, rig.camera.frame)  # the overlay is on it
+
+
 def test_no_frame_does_not_spin(clock: FakeClock) -> None:
     rig = Rig(clock, no_frame_wait_s=0.05)
     rig.camera.remaining = 0

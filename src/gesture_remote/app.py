@@ -233,6 +233,10 @@ class Pipeline:
         self._close_quits = close_quits
         self._no_frame_wait_s = no_frame_wait_s
         self._last_fired: tuple[str, float] | None = None
+        self.preview_wanted = False
+        """Set by the gestures popup while it shows the camera (another thread)."""
+        self.latest_preview: np.ndarray | None = None
+        """Latest overlay image (BGR) while `preview_wanted`; memory only, never written."""
 
         self._startup_config = config
         self._config = config
@@ -292,7 +296,12 @@ class Pipeline:
                 if isinstance(event, Triggered) and not event.repeat:
                     self._last_fired = (f"{event.label} -> {event.action.type}", now)
 
-        if self._view is not None and not self._view.show(self._overlay(frame, observation, now)):
+        image = None
+        if self._view is not None or self.preview_wanted:  # drawn only when someone looks
+            image = self._overlay(frame, observation, now)
+        if self.preview_wanted:
+            self.latest_preview = image
+        if self._view is not None and not self._view.show(image):
             if self._close_quits:
                 return "quit"
             self.show_view = False
