@@ -32,8 +32,17 @@ $PY = "C:\Users\adrie\gesture-remote\.venv\Scripts\python.exe"
 & $PY tools\check_setup.py --no-camera
 & $PY tools\check_setup.py --apps "Apple Music"   # Start menu name -> AppID
 & $PY tools\check_setup.py --press playpause      # sends a REAL key press
-& $PY -m gesture_remote --debug --dry-run         # from step 5 on
+& $PY -m gesture_remote --debug --dry-run         # debug window, actions only logged
+& $PY tools\count_events.py --since "13:40"       # step-6 counts from logs/gesture-remote.log*
 ```
+
+The log is written with **CRLF** line endings: a regex ending in `$` over LF-split lines (ripgrep,
+the Grep tool, `bytes.split(b"\n")`) counts **0** events. Use `tools\count_events.py`
+(`splitlines()`), or end the regex with `\r?$` (lot C, `test_seams`).
+
+Measuring the running app: `.venv\Scripts\python.exe` is a **redirector** that starts the base
+interpreter as a child process. CPU, memory and network must be read on the child
+(`ParentProcessId` = the launcher's PID), never on the launcher.
 
 No `pip install` outside the main checkout; a missing dependency is requested from the admin.
 
@@ -171,7 +180,10 @@ Lot A's and lot C's round-1 files are now on `main`; changes to them go through 
 
 - [x] Step 0 — skeleton, gates (a) models, (b) camera, (c) Start menu — see SHA of the commit
       adding this file.
-- [ ] Steps 1–4 — lot A landed `fd5e159`, lot C landed `d3e6e5c` (103 passed, 0 skipped on
-      main at `d3e6e5c`); lot B pending.
-- [ ] Step 5 — `recognition` wiring, `app.py`, `__main__.py`, `debug_view.py`, `logging_setup.py`.
+- [x] Steps 1–4 — lots A `fd5e159`, C `d3e6e5c`, B `66dabe8`; seam sweeps `0b825e5`, `38eb37f`.
+- [x] Step 5 — `05f7bb2`. First real run `--debug --dry-run` (2026-09-23, admin): ready in 3.4 s,
+      DSHOW 640×480, **0 TCP / 0 UDP** on the child PID, ~25 % of one core and 183 MB over 15 s
+      with (probably) no hand in view, closing the window → "camera released", exit 0.
+- [ ] Step 5 follow-ups — `restart_required` against the startup config (B), JSON errors from
+      Get-StartApps at startup → exit 3 (A).
 - [ ] Step 6 — measurements and tuning with the user; phase 1 ✅ + SHA.
