@@ -32,9 +32,9 @@ Gestures are mapped in `config.yaml`, which is reloaded automatically when saved
 ### In the background (tray icon, no console)
 
 ```powershell
-.\.venv\Scripts\python tools\make_shortcut.py             # "gesture-remote" shortcut on the Desktop
+.\.venv\Scripts\python tools\make_shortcut.py             # Desktop + Start menu (Windows search)
 .\.venv\Scripts\python tools\make_shortcut.py --startup   # ...and start with Windows
-.\.venv\Scripts\python tools\make_shortcut.py --remove    # delete both shortcuts
+.\.venv\Scripts\python tools\make_shortcut.py --remove    # delete every shortcut
 ```
 
 The shortcut runs `pythonw -m gesture_remote --tray`. The icon near the clock is green when armed,
