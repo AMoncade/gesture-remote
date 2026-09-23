@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -21,8 +22,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import numpy as np
 import pytest
 
+from gesture_remote import logging_setup
 from gesture_remote.actions import (
     ActionDispatcher,
     LaunchHandler,
@@ -30,14 +33,17 @@ from gesture_remote.actions import (
     StartAppsIndex,
     default_handlers,
 )
+from gesture_remote.app import ConfigWatcher, Pipeline, ReloadSlot, build_app
 from gesture_remote.config import (
     Config,
     ConfigError,
+    ConfigReload,
     ConfigStore,
     EngineSettings,
     load_config,
 )
 from gesture_remote.engine import ArmedChanged, EngineEvent, GestureEngine, Ignored, Triggered
+from gesture_remote.feedback import DISARMED_TONES, FIRE_TONES, Feedback, Tone
 from gesture_remote.observation import NONE_LABEL, HandObservation
 from gesture_remote.recognition import CANNED_LABEL_SET, CANNED_LABELS, LabelMapper, to_observation
 
@@ -318,7 +324,11 @@ class Store:
         )
 
     def edit(self, bindings: str) -> None:
-        path = write_config(self.folder, bindings)
+        self.edit_text(write_config(self.folder, bindings).read_text(encoding="utf-8"))
+
+    def edit_text(self, text: str) -> None:
+        path = self.folder / "config.yaml"
+        path.write_text(text, encoding="utf-8")
         self.version += 1
         stamp = 1_700_000_000_000_000_000 + self.version * 10**9
         os.utime(path, ns=(stamp, stamp))
@@ -498,3 +508,386 @@ def test_reload_without_carrying_state_re_arms_silently() -> None:
     events = after.gesture("open_palm", 5)
     assert [type(event) for event in events] == [Triggered]
     assert not any(isinstance(event, ArmedChanged) for event in after.events)
+
+
+# ============================================================================================
+# Part 2: app.py wiring (step 5) with the real engine, Feedback, ConfigStore, dispatcher and
+# logging. Boundary fakes as above, plus a still camera and a recognizer that converts scripted
+# MediaPipe results with the real recognition code.
+# ============================================================================================
+
+FRAME = np.zeros((4, 4, 3), dtype=np.uint8)
+COUNT_RE = re.compile(r" gesture_remote\.events: TRIGGER (\S+) (\S+)$")
+"""The step-6 counting regex announced by lot A (first fires only)."""
+COUNT_RE_ANY_EOL = re.compile(COUNT_RE.pattern.removesuffix("$") + r"\r?$")
+"""The same, robust to the CRLF line ends of the log file (ripgrep keeps the \\r)."""
+
+
+class StillCamera:
+    def __init__(self, settings: Any = None) -> None:
+        self.closed = False
+
+    def read(self) -> np.ndarray:
+        return FRAME
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class ScriptedRecognizer:
+    labels = CANNED_LABEL_SET
+
+    def __init__(self) -> None:
+        self.result = mp_result()
+        self.timestamps: list[int] = []
+        self._map = LabelMapper()
+
+    def recognize(self, rgb: np.ndarray, timestamp_ms: int) -> Any:
+        self.timestamps.append(timestamp_ms)
+        return to_observation(self.result, (rgb.shape[1], rgb.shape[0]), self._map)
+
+    def close(self) -> None:
+        pass
+
+
+class RecordingBeeper:
+    def __init__(self) -> None:
+        self.played: list[tuple[Tone, ...]] = []
+
+    def __call__(self, tones: Any) -> None:
+        self.played.append(tuple(tones))
+
+
+class RecordingDispatcher:
+    def __init__(self) -> None:
+        self.actions: list[Any] = []
+
+    def dispatch(self, action: Any) -> None:
+        self.actions.append(action)
+
+    def close(self) -> None:
+        pass
+
+
+class Vision:
+    """A real Pipeline on a fake clock, stepped at 30 fps."""
+
+    def __init__(
+        self, config: Config, clock: Any, feedback: Feedback, slot: ReloadSlot | None = None
+    ) -> None:
+        self.clock = clock
+        self.recognizer = ScriptedRecognizer()
+        self.slot = slot or ReloadSlot()
+        self.dispatcher = RecordingDispatcher()
+        self.pipeline = Pipeline(
+            camera=StillCamera(),
+            recognizer=self.recognizer,
+            config=config,
+            reloads=self.slot,
+            dispatcher=self.dispatcher,
+            feedback=feedback,
+            clock=clock,
+        )
+
+    def show(self, result: SimpleNamespace, seconds: float) -> None:
+        self.recognizer.result = result
+        for _ in range(round(seconds * FPS)):
+            self.pipeline.step()
+            self.clock.advance(1 / FPS)
+
+    def gesture(self, label: str, seconds: float) -> None:
+        self.show(mp_result((RAW_NAME[label], 0.9)), seconds)
+
+    def rest(self, seconds: float) -> None:
+        self.show(mp_result(), seconds)
+
+
+def app_config(sound: bool = True, **engine: Any) -> Config:
+    return Config.model_validate(
+        {
+            "settings": {"engine": {"stable_frames": 3, **engine}, "feedback": {"sound": sound}},
+            "bindings": {
+                "thumb_up": {"type": "keys", "keys": ["volumeup"], "repeat_while_held": True},
+                "open_palm": {"type": "keys", "keys": ["playpause"]},
+            },
+        }
+    )
+
+
+def events_lines(caplog: pytest.LogCaptureFixture) -> list[str]:
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == logging_setup.EVENTS_LOGGER
+    ]
+
+
+# --- P2.2 events <-> app: log lines, sounds and dispatch, from the real engine -------------
+
+
+def test_every_event_reaches_log_sound_and_dispatcher_as_decided(
+    clock: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    beeper = RecordingBeeper()
+    vision = Vision(app_config(), clock, Feedback(True, beeper))
+    with caplog.at_level(logging.INFO, logger=logging_setup.EVENTS_LOGGER):
+        vision.rest(1.2)  # past the startup cooldown
+        vision.gesture("thumb_up", 1.0)  # first fire, then repetitions
+        vision.gesture("open_palm", 0.2)  # the repetitions keep the cooldown running
+        vision.rest(1.2)
+        vision.gesture("victory", 0.2)  # not bound
+        vision.rest(1.2)
+        vision.gesture("i_love_you", 0.2)  # disarm
+        vision.rest(1.2)
+        vision.gesture("open_palm", 0.2)  # disarmed
+        vision.rest(1.2)
+    lines = events_lines(caplog)
+    repeats = lines.count("TRIGGER thumb_up keys repeat")
+    assert repeats >= 2
+    assert lines == ["TRIGGER thumb_up keys"] + ["TRIGGER thumb_up keys repeat"] * repeats + [
+        "IGNORED open_palm cooldown",
+        "IGNORED victory unmapped",
+        "DISARMED",
+        "IGNORED open_palm disarmed",
+    ]
+    assert len(vision.dispatcher.actions) == 1 + repeats
+    assert beeper.played == [FIRE_TONES, DISARMED_TONES]  # no beep on repeats nor Ignored
+
+
+# --- P2.3 Feedback.sound and the arm state across a reload ---------------------------------
+
+
+def test_reload_switches_the_sound_and_keeps_the_arm_state(
+    clock: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    beeper = RecordingBeeper()
+    vision = Vision(app_config(), clock, Feedback(True, beeper))
+    with caplog.at_level(logging.INFO, logger=logging_setup.EVENTS_LOGGER):
+        vision.rest(1.2)
+        vision.gesture("i_love_you", 0.2)
+        vision.rest(1.2)
+        vision.slot.put(ConfigReload(app_config(sound=False), ()))
+        vision.rest(1.2)  # the reload is taken here; the new engine starts in cooldown
+        vision.gesture("open_palm", 0.2)  # still disarmed after the reload
+        vision.rest(1.2)
+        vision.gesture("i_love_you", 0.2)  # re-armed, silently: sound is off now
+        vision.rest(1.2)
+        vision.slot.put(ConfigReload(app_config(sound=True), ()))
+        vision.rest(1.2)
+        vision.gesture("open_palm", 0.2)
+    assert events_lines(caplog) == [
+        "DISARMED",
+        "IGNORED open_palm disarmed",
+        "ARMED",
+        "TRIGGER open_palm keys",
+    ]
+    assert beeper.played == [DISARMED_TONES, FIRE_TONES]
+
+
+# --- P2.4 one clock: timestamps, engine, recreation ----------------------------------------
+
+
+def test_timestamps_engine_and_recreation_share_the_pipeline_clock(
+    clock: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    """If the engine, its recreation or the timestamps used another clock, the two cooldown
+    windows (startup, reload) would not fall where the fake clock puts them."""
+    vision = Vision(app_config(cooldown_s=1.0), clock, Feedback(False))
+    with caplog.at_level(logging.INFO, logger=logging_setup.EVENTS_LOGGER):
+        vision.gesture("open_palm", 0.2)  # startup cooldown (the engine was built at 1000.0)
+        assert vision.recognizer.timestamps[:3] == [
+            int(round(1000.0 + n / FPS, 9) * 1000) for n in range(3)
+        ]
+        vision.rest(1.2)
+        vision.gesture("open_palm", 0.2)  # fires
+        vision.rest(1.2)
+        vision.slot.put(ConfigReload(app_config(cooldown_s=1.0), ()))
+        vision.gesture("open_palm", 0.5)  # onset ~0.07 s after the reload: its cooldown
+        vision.rest(1.2)
+        vision.gesture("open_palm", 0.2)  # > 1 s after the reload: fires
+    assert events_lines(caplog) == [
+        "IGNORED open_palm cooldown",
+        "TRIGGER open_palm keys",
+        "IGNORED open_palm cooldown",
+        "TRIGGER open_palm keys",
+    ]
+
+
+# --- P2.1 build_app: one index, one dispatcher, script registry across a real reload -------
+
+
+def step_until(app: Any, recognizer: ScriptedRecognizer, result: Any, done: Any) -> None:
+    recognizer.result = result
+    deadline = time.monotonic() + WAIT_S
+    while not done():
+        assert time.monotonic() < deadline, "condition not reached"
+        app.pipeline.step()
+        time.sleep(0.01)
+
+
+def rest_real(app: Any, recognizer: ScriptedRecognizer, seconds: float = 0.15) -> None:
+    recognizer.result = mp_result()
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        app.pipeline.step()
+        time.sleep(0.01)
+
+
+def test_build_app_shares_the_index_and_keeps_running_scripts_across_a_real_reload(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Real time (ConfigStore stats once a second): about 2-3 s."""
+    (tmp_path / "fake.task").write_bytes(b"model bytes")
+    (tmp_path / "m.py").write_text("", encoding="utf-8")
+    head = (
+        "settings:\n  recognition: {model: fake.task}\n"
+        "  engine: {stable_frames: 1, release_s: 0.05, cooldown_s: 0.0}\n"
+    )
+    bindings = (
+        "bindings:\n  thumb_down: {type: script, path: m.py}\n"
+        '  pointing_up: {type: launch, app: "Apple Music"}\n'
+    )
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(head + "  feedback: {sound: true}\n" + bindings, encoding="utf-8")
+
+    powershell = PowerShell(("Apple Music", APPLE_MUSIC_ID))
+    index = StartAppsIndex(powershell)
+    popen, run, beeper, recognizer = (
+        FakePopen(),
+        Recorder(),
+        RecordingBeeper(),
+        ScriptedRecognizer(),
+    )
+    made: list[tuple[StartAppsIndex, ActionDispatcher]] = []
+
+    def dispatcher_factory(*, log_dir: Path, start_apps: StartAppsIndex, dry_run: bool) -> Any:
+        dispatcher = ActionDispatcher(
+            default_handlers(
+                presser=FakePresser(),
+                resolve_app=start_apps.resolve,
+                scripts=ScriptRunner(log_dir, popen=popen, python="py.exe"),
+                open_tab=Recorder(),
+                run=run,
+                startfile=Recorder(),
+            ),
+            dry_run=dry_run,
+        )
+        made.append((start_apps, dispatcher))
+        return dispatcher
+
+    app = build_app(
+        config_path,
+        log_dir=tmp_path / "logs",
+        start_apps=index,
+        is_valid_key=valid_key,
+        dispatcher_factory=dispatcher_factory,
+        recognizer_factory=lambda model, settings: recognizer,
+        camera_factory=StillCamera,
+        feedback_factory=lambda sound: Feedback(sound, beeper),
+    )
+    thumb_down, pointing_up = mp_result(("Thumb_Down", 0.9)), mp_result(("Pointing_Up", 0.9))
+    try:
+        [(shared, dispatcher)] = made
+        assert shared is index and app.dispatcher is dispatcher
+        step_until(app, recognizer, thumb_down, lambda: len(popen.argvs) == 1)
+        rest_real(app, recognizer)
+        step_until(app, recognizer, pointing_up, lambda: len(run.calls) == 1)
+        rest_real(app, recognizer)
+        assert len(beeper.played) == 2
+
+        config_path.write_text(head + "  feedback: {sound: false}\n" + bindings, encoding="utf-8")
+        before = app.pipeline.engine
+
+        def reloaded() -> bool:
+            app.watcher.poll_once()
+            app.pipeline.step()
+            time.sleep(0.1)
+            return app.pipeline.engine is not before
+
+        step_until(app, recognizer, mp_result(), reloaded)
+
+        with caplog.at_level(logging.INFO):
+            step_until(app, recognizer, thumb_down, lambda: "still running" in caplog.text)
+        rest_real(app, recognizer)
+        step_until(app, recognizer, pointing_up, lambda: len(run.calls) == 2)
+        assert len(popen.argvs) == 1  # the running script was not started again
+        assert powershell.calls == 1  # loader, reload and both launches: one Get-StartApps
+        assert len(beeper.played) == 2  # sound off since the reload
+
+        popen.processes[0].finish()
+        rest_real(app, recognizer)
+        step_until(app, recognizer, thumb_down, lambda: len(popen.argvs) == 2)
+    finally:
+        for process in popen.processes:
+            process.finish()
+        app.close()
+
+
+# --- P2.5 restart_required: what the user reads --------------------------------------------
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "DEFECT (owner: B, config.py ConfigStore.poll): restart_required is computed against "
+        "the PREVIOUS config, app.py against the STARTUP one. Setting camera back to its startup "
+        "value makes ConfigStore warn 'restart required for those settings' in the same reload "
+        "where app.py logs 'back to their startup values' and clears the overlay. Proposed: "
+        "ConfigStore compares against the config it loaded first."
+    ),
+)
+def test_reverting_a_restart_setting_is_not_reported_as_needing_a_restart(
+    tmp_path: Path, clock: Any, caplog: pytest.LogCaptureFixture
+) -> None:
+    store = Store(tmp_path, "  {}\n", PowerShell())
+    slot = ReloadSlot()
+    watcher = ConfigWatcher(store.store, slot)
+    vision = Vision(store.store.config, clock, Feedback(False), slot=slot)
+
+    def reload_camera(index: int) -> None:
+        store.edit_text(f"settings:\n  camera: {{index: {index}}}\nbindings: {{}}\n")
+        for _ in range(2):
+            store.clock += 1.0
+            watcher.poll_once()
+        vision.pipeline.step()
+
+    reload_camera(1)
+    assert vision.pipeline.restart_required == ("camera",)
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        reload_camera(0)
+    assert vision.pipeline.restart_required == ()
+    assert "back to their startup values" in caplog.text
+    assert [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING] == []
+
+
+# --- P2.6 the step-6 counting regex on the real log file -----------------------------------
+
+
+def test_step6_regex_counts_first_fires_only_in_the_real_log_file(
+    tmp_path: Path, clock: Any
+) -> None:
+    root = logging.getLogger()
+    handlers_before, level_before = set(root.handlers), root.level
+    log_file = logging_setup.setup_logging(tmp_path, console=False)
+    try:
+        vision = Vision(app_config(), clock, Feedback(False))
+        vision.rest(1.2)
+        vision.gesture("thumb_up", 1.0)
+        vision.rest(1.2)
+        vision.gesture("open_palm", 0.2)
+        vision.rest(1.2)
+    finally:
+        for handler in set(root.handlers) - handlers_before:
+            root.removeHandler(handler)
+            handler.close()
+        root.setLevel(level_before)
+    lines = log_file.read_text(encoding="utf-8").splitlines()
+    fires = [match.groups() for line in lines if (match := COUNT_RE.search(line))]
+    assert fires == [("thumb_up", "keys"), ("open_palm", "keys")]
+    assert sum(line.endswith("TRIGGER thumb_up keys repeat") for line in lines) >= 2
+    # The file has CRLF line ends. Split on LF only (as ripgrep does), the announced regex finds
+    # nothing: \S+ stops before the \r and $ does not match there.
+    raw_lines = log_file.read_bytes().decode("utf-8").split("\n")
+    assert [m.groups() for line in raw_lines if (m := COUNT_RE.search(line))] == []
+    assert [m.groups() for line in raw_lines if (m := COUNT_RE_ANY_EOL.search(line))] == fires
