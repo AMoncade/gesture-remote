@@ -439,6 +439,28 @@ def test_view_gets_the_overlay_and_closing_it_stops_the_loop(clock: FakeClock) -
     assert not np.array_equal(image, rig.camera.frame)  # something was drawn on it
 
 
+def test_tray_mode_opens_and_hides_the_window_at_run_time(clock: FakeClock) -> None:
+    views: list[FakeView] = []
+
+    def factory() -> FakeView:
+        views.append(FakeView(keep_open=3))
+        return views[-1]
+
+    rig = Rig(clock, view_factory=factory, close_quits=False)
+    assert rig.pipeline.step() == "frame" and views == []  # hidden at start
+    rig.pipeline.show_view = True
+    rig.pipeline.step()
+    assert len(views) == 1 and len(views[0].images) == 1
+    rig.pipeline.show_view = False
+    rig.pipeline.step()
+    assert views[0].closed
+    # closing the window by hand only hides it: the loop goes on
+    rig.pipeline.show_view = True
+    for _ in range(3):
+        assert rig.pipeline.step() == "frame"
+    assert views[1].closed and rig.pipeline.show_view is False
+
+
 def test_no_frame_does_not_spin(clock: FakeClock) -> None:
     rig = Rig(clock, no_frame_wait_s=0.05)
     rig.camera.remaining = 0

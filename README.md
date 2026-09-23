@@ -29,6 +29,18 @@ To reproduce the exact tested versions: `.\.venv\Scripts\python -m pip install -
 Gestures are mapped in `config.yaml`, which is reloaded automatically when saved.
 🤟 (`i_love_you`) arms or disarms the remote.
 
+### In the background (tray icon, no console)
+
+```powershell
+.\.venv\Scripts\python tools\make_shortcut.py             # "gesture-remote" shortcut on the Desktop
+.\.venv\Scripts\python tools\make_shortcut.py --startup   # ...and start with Windows
+.\.venv\Scripts\python tools\make_shortcut.py --remove    # delete both shortcuts
+```
+
+The shortcut runs `pythonw -m gesture_remote --tray`. The icon near the clock is green when armed,
+red when disarmed. Its menu: show the camera window (or double-click the icon), edit
+`config.yaml`, open the log, quit. A startup error is shown in a message box.
+
 ## Macros
 
 A macro is a Python script in `macros/`, bound with `{ type: script, path: macros/my_macro.py }`.

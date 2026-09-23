@@ -33,8 +33,23 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--dry-run", action="store_true", help="log the actions instead of running them"
     )
+    parser.add_argument(
+        "--tray",
+        action="store_true",
+        help="run in the background with an icon near the clock (use pythonw for no console)",
+    )
     parser.add_argument("-v", "--verbose", action="store_true", help="debug-level logging")
     return parser.parse_args(argv)
+
+
+def show_error(message: str) -> None:
+    """Without a console (pythonw), a startup error would vanish: show it in a message box."""
+    if sys.stderr is not None:
+        return
+    import ctypes
+
+    MB_ICONERROR = 0x10
+    ctypes.windll.user32.MessageBoxW(None, message, "gesture-remote", MB_ICONERROR)
 
 
 def main(argv: Sequence[str] | None = None, *, log_dir: Path = LOG_DIR) -> int:
@@ -44,12 +59,20 @@ def main(argv: Sequence[str] | None = None, *, log_dir: Path = LOG_DIR) -> int:
     from gesture_remote.config import ConfigError
     from gesture_remote.logging_setup import setup_logging
 
-    log_file = setup_logging(log_dir, verbose=args.verbose)
+    # pythonw has no console: sys.stderr is None there, so log to the file only.
+    log_file = setup_logging(log_dir, verbose=args.verbose, console=sys.stderr is not None)
     logger.info("gesture-remote starting; log file %s", log_file)
     try:
-        app = build_app(args.config, log_dir=log_dir, debug=args.debug, dry_run=args.dry_run)
+        app = build_app(
+            args.config,
+            log_dir=log_dir,
+            debug=args.debug,
+            dry_run=args.dry_run,
+            tray=args.tray,
+        )
     except ConfigError as error:  # first: ConfigError is a ValueError, like JSONDecodeError
         logger.error("%s", error)  # lists every problem, one per line
+        show_error(f"config.yaml refusé :\n\n{error}")
         return EXIT_BAD_CONFIG
     except (subprocess.SubprocessError, OSError, json.JSONDecodeError) as error:
         # Not a ConfigError: resolving a Start-menu app runs PowerShell (Get-StartApps), which
@@ -60,7 +83,12 @@ def main(argv: Sequence[str] | None = None, *, log_dir: Path = LOG_DIR) -> int:
             type(error).__name__,
             error,
         )
+        show_error(f"Démarrage impossible : {type(error).__name__}: {error}")
         return EXIT_ENVIRONMENT
+    if args.tray:
+        from gesture_remote.tray import run_with_tray
+
+        return run_with_tray(app, args.config, log_file)
     return app.run()
 
 

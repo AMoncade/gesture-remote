@@ -145,6 +145,21 @@ def test_lines_when_disarmed_idle_and_restart_required() -> None:
     ]
 
 
+def test_the_last_fired_gesture_is_shown_under_the_state() -> None:
+    snapshot = FakeSnapshot(armed=True, cooldown_remaining_s=0.0, segments=())
+    lines = overlay_lines(observation(hand()), snapshot, STATS, last_fired="victory -> url")
+    assert lines[1:3] == ["ARMED", "FIRED victory -> url"]
+
+
+def test_tray_icon_image() -> None:
+    from gesture_remote.tray import ARMED_RGB, icon_image
+
+    image = icon_image(ARMED_RGB)
+    assert image.size == (64, 64) and image.mode == "RGBA"
+    assert image.getpixel((8, 32))[:3] == ARMED_RGB  # inside the disc, left of the hand
+    assert image.getpixel((0, 0))[3] == 0  # transparent corner
+
+
 def test_lines_without_hand_or_engine() -> None:
     assert overlay_lines(observation(), None, STATS)[0] == "no hand"
 

@@ -184,6 +184,12 @@ Lot A's and lot C's round-1 files are now on `main`; changes to them go through 
 - [x] Step 5 — `05f7bb2`. First real run `--debug --dry-run` (2026-09-23, admin): ready in 3.4 s,
       DSHOW 640×480, **0 TCP / 0 UDP** on the child PID, ~25 % of one core and 183 MB over 15 s
       with (probably) no hand in view, closing the window → "camera released", exit 0.
-- [ ] Step 5 follow-ups — `restart_required` against the startup config (B), JSON errors from
+- [x] Step 5 follow-ups — `restart_required` against the startup config (B), JSON errors from
       Get-StartApps at startup → exit 3 (A).
-- [ ] Step 6 — measurements and tuning with the user; phase 1 ✅ + SHA.
+- [x] Step 6 — with the user (2026-09-23): every mapped gesture fires its real action on the
+      webcam, 🤟 disarms (then ✊ is IGNORED disarmed), drinking in front of the camera fires
+      nothing; sample-photo end-to-end run 4 first fires, 0 double. Not measured: the 10-try
+      reliability count and CPU with a hand in view. **Phase 1 ✅** (SHA: the commit adding this).
+- [x] Tray mode (from phase 3, simplified): `--tray`, `tools\make_shortcut.py`, nicer overlay.
+      Not established: the very first `--tray` launch stalled > 30 s before the model loaded
+      (killed); the next one was ready in 2 s and every step replayed alone takes 1–2 s.

@@ -32,14 +32,24 @@ HAND_CONNECTIONS: tuple[tuple[int, int], ...] = (
 )  # fmt: skip
 """Our own table: `mp.solutions` (and its HAND_CONNECTIONS) is gone from mediapipe >= 0.10.30."""
 
-BONE_COLOR = (255, 255, 255)
-JOINT_COLOR = (0, 200, 0)
+# BGR
+BONE_COLOR = (235, 200, 80)
+JOINT_COLOR = (255, 255, 255)
+JOINT_RING_COLOR = (180, 120, 30)
 TEXT_COLOR = (255, 255, 255)
-TEXT_BACKGROUND = (0, 0, 0)
+DIM_TEXT_COLOR = (175, 175, 175)
+PANEL_COLOR = (25, 20, 18)
+PANEL_ALPHA = 0.6
+ARMED_COLOR = (90, 170, 40)
+DISARMED_COLOR = (60, 60, 210)
+FIRED_COLOR = (40, 170, 240)
 WARNING_COLOR = (0, 0, 255)
 FONT = cv2.FONT_HERSHEY_SIMPLEX
+TITLE_SCALE = 0.65
 FONT_SCALE = 0.5
-LINE_HEIGHT = 20
+SMALL_SCALE = 0.42
+PADDING = 10
+LINE_GAP = 9
 
 
 # --- what the overlay reads from the engine (structural: no import of engine.py) -------------
@@ -123,6 +133,7 @@ def overlay_lines(
     snapshot: EngineSnapshotLike | None,
     stats: FrameStats,
     restart_required: Sequence[str] = (),
+    last_fired: str | None = None,
 ) -> list[str]:
     """The overlay text, top to bottom."""
     lines = [describe_hand(observation.primary()) if observation else "idle: frame not inferred"]
@@ -131,6 +142,9 @@ def overlay_lines(
         if snapshot.cooldown_remaining_s > 0:
             state += f"  cooldown {snapshot.cooldown_remaining_s:.1f} s"
         lines.append(state)
+    if last_fired:
+        lines.append(f"FIRED {last_fired}")
+    if snapshot is not None:
         for status in snapshot.segments:
             repeating = ", repeating" if status.repeating else ""
             lines.append(f"segment {status.segment.label}: {status.outcome}{repeating}")
@@ -156,27 +170,69 @@ def draw_hand(image: np.ndarray, hand: HandObservation) -> None:
     height, width = image.shape[:2]
     points = landmark_pixels(hand.landmarks, (width, height))
     for start, end in HAND_CONNECTIONS:
-        cv2.line(image, tuple(points[start]), tuple(points[end]), BONE_COLOR, 2, cv2.LINE_AA)
+        cv2.line(image, tuple(points[start]), tuple(points[end]), BONE_COLOR, 3, cv2.LINE_AA)
+    # every ring first, then every centre: close joints must not paint over each other's centre
     for x, y in points:
-        cv2.circle(image, (int(x), int(y)), 4, JOINT_COLOR, -1, cv2.LINE_AA)
+        cv2.circle(image, (int(x), int(y)), 6, JOINT_RING_COLOR, -1, cv2.LINE_AA)
+    for x, y in points:
+        cv2.circle(image, (int(x), int(y)), 3, JOINT_COLOR, -1, cv2.LINE_AA)
+
+
+def _line_style(index: int, text: str) -> tuple[float, int, tuple[int, int, int] | None]:
+    """(font scale, thickness, pill colour or None) for one overlay line."""
+    if index == 0:
+        return TITLE_SCALE, 2, None
+    if text.startswith("ARMED"):
+        return FONT_SCALE, 1, ARMED_COLOR
+    if text.startswith("DISARMED"):
+        return FONT_SCALE, 1, DISARMED_COLOR
+    if text.startswith("FIRED"):
+        return FONT_SCALE, 1, FIRED_COLOR
+    if text.startswith("RESTART"):
+        return FONT_SCALE, 1, WARNING_COLOR
+    return SMALL_SCALE, 1, None
 
 
 def draw_overlay(
     frame: np.ndarray, observation: FrameObservation | None, lines: Sequence[str]
 ) -> np.ndarray:
-    """A copy of `frame` (BGR, as shown) with every hand and the text lines drawn on it."""
+    """A copy of `frame` (BGR, as shown) with every hand and a translucent text panel."""
     image = frame.copy()
     if observation is not None:
         for hand in observation.hands:
             draw_hand(image, hand)
-    for index, text in enumerate(lines):
-        origin = (8, LINE_HEIGHT * (index + 1))
-        (text_width, text_height), baseline = cv2.getTextSize(text, FONT, FONT_SCALE, 1)
-        top_left = (origin[0] - 3, origin[1] - text_height - 3)
-        bottom_right = (origin[0] + text_width + 3, origin[1] + baseline)
-        cv2.rectangle(image, top_left, bottom_right, TEXT_BACKGROUND, -1)
-        color = WARNING_COLOR if text.startswith(("DISARMED", "RESTART")) else TEXT_COLOR
-        cv2.putText(image, text, origin, FONT, FONT_SCALE, color, 1, cv2.LINE_AA)
+    if not lines:
+        return image
+
+    styles = [_line_style(index, text) for index, text in enumerate(lines)]
+    sizes = [
+        cv2.getTextSize(text, FONT, scale, thick)
+        for text, (scale, thick, _) in zip(lines, styles, strict=True)
+    ]
+    width = max(w for (w, _), _ in sizes) + 2 * PADDING + 12
+    height = sum(h + b + LINE_GAP for (_, h), b in sizes) + PADDING
+    left, top = 10, 10
+    right, bottom = min(left + width, image.shape[1] - 1), min(top + height, image.shape[0] - 1)
+    panel = image[top:bottom, left:right]
+    panel[:] = (panel * (1 - PANEL_ALPHA) + np.array(PANEL_COLOR) * PANEL_ALPHA).astype(np.uint8)
+
+    y = top + PADDING
+    for text, (scale, thick, pill), ((text_width, text_height), baseline) in zip(
+        lines, styles, sizes, strict=True
+    ):
+        y += text_height
+        x = left + PADDING
+        if pill is not None:
+            cv2.rectangle(
+                image,
+                (x - 5, y - text_height - 5),
+                (x + text_width + 5, y + baseline + 2),
+                pill,
+                -1,
+            )
+        color = DIM_TEXT_COLOR if pill is None and scale == SMALL_SCALE else TEXT_COLOR
+        cv2.putText(image, text, (x, y), FONT, scale, color, thick, cv2.LINE_AA)
+        y += baseline + LINE_GAP
     return image
 
 

@@ -18,7 +18,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol, assert_never
 
@@ -57,6 +57,8 @@ Clock = Callable[[], float]
 StepResult = Literal["frame", "no_frame", "quit"]
 
 NO_FRAME_WAIT_S = 0.05
+FIRED_SHOWN_S = 2.0
+"""How long the overlay shows the last fired gesture."""
 """Pause when the camera has no frame: Camera.read() never sleeps, so this avoids a busy loop."""
 
 
@@ -206,8 +208,14 @@ class Pipeline:
         engine_factory: EngineFactory = make_engine,
         throttle_factory: ThrottleFactory = make_throttle,
         view: View | None = None,
+        view_factory: Callable[[], View] | None = None,
+        close_quits: bool = True,
         no_frame_wait_s: float = NO_FRAME_WAIT_S,
     ) -> None:
+        """`view` is shown from the start. With `view_factory`, another thread may flip
+        `show_view` to open or close the window at run time (it is always created, shown and
+        destroyed on the pipeline thread). `close_quits=False` (tray mode): closing the window
+        only hides it."""
         self._camera = camera
         self._recognizer = recognizer
         self._reloads = reloads
@@ -217,7 +225,12 @@ class Pipeline:
         self._engine_factory = engine_factory
         self._throttle_factory = throttle_factory
         self._view = view
+        self._view_factory = view_factory
+        self.show_view = view is not None
+        """Written by the tray thread, read by the pipeline thread (a plain bool is enough)."""
+        self._close_quits = close_quits
         self._no_frame_wait_s = no_frame_wait_s
+        self._last_fired: tuple[str, float] | None = None
 
         self._startup_config = config
         self._config = config
@@ -260,6 +273,7 @@ class Pipeline:
     def step(self) -> StepResult:
         """Handle one camera frame (reload check, inference if due, events, overlay)."""
         self._apply_reload(self._reloads.take())
+        self._sync_view()
         frame = self._camera.read()
         if frame is None:
             return "no_frame"
@@ -273,10 +287,24 @@ class Pipeline:
             self._throttle.report(hand is not None)
             for event in self._engine.update(hand, now):
                 route_event(event, self._dispatcher, self._feedback)
+                if isinstance(event, Triggered) and not event.repeat:
+                    self._last_fired = (f"{event.label} -> {event.action.type}", now)
 
-        if self._view is not None and not self._view.show(self._overlay(frame, observation)):
-            return "quit"
+        if self._view is not None and not self._view.show(self._overlay(frame, observation, now)):
+            if self._close_quits:
+                return "quit"
+            self.show_view = False
+            self._sync_view()
         return "frame"
+
+    def _sync_view(self) -> None:
+        if self._view_factory is None:
+            return
+        if self.show_view and self._view is None:
+            self._view = self._view_factory()
+        elif not self.show_view and self._view is not None:
+            self._view.close()
+            self._view = None
 
     def _infer(self, frame: np.ndarray, now: float) -> FrameObservation:
         # cvtColor returns a new contiguous array; never a frame[..., ::-1] view: mp.Image
@@ -288,14 +316,20 @@ class Pipeline:
         self._inference_rate.tick()
         return observation
 
-    def _overlay(self, frame: np.ndarray, observation: FrameObservation | None) -> np.ndarray:
+    def _overlay(
+        self, frame: np.ndarray, observation: FrameObservation | None, now: float
+    ) -> np.ndarray:
         stats = FrameStats(
             inferred=observation is not None,
             inference_ms=self._inference_ms,
             camera_fps=self._camera_rate.rate,
             inference_fps=self._inference_rate.rate,
         )
-        lines = overlay_lines(observation, self._engine.snapshot(), stats, self.restart_required)
+        fired = self._last_fired
+        recent = fired[0] if fired and now - fired[1] < FIRED_SHOWN_S else None
+        lines = overlay_lines(
+            observation, self._engine.snapshot(), stats, self.restart_required, recent
+        )
         return draw_overlay(frame, observation, lines)
 
     def _apply_reload(self, reload: ConfigReload | None) -> None:
@@ -341,11 +375,14 @@ class App:
     recognizer: Recognizer
     camera: Camera
 
+    stop: threading.Event = field(default_factory=threading.Event)
+    """Set it from any thread (e.g. the tray's Quit) to end run()."""
+
     WATCHER_JOIN_S = 2.0
     """The watcher may sit in Get-StartApps (up to 60 s): it is a daemon, never waited for long."""
 
     def run(self) -> int:
-        stop = threading.Event()
+        stop = self.stop
         worker = threading.Thread(
             target=self.pipeline.run, args=(stop,), name="pipeline", daemon=True
         )
@@ -378,6 +415,7 @@ def build_app(
     log_dir: Path,
     debug: bool = False,
     dry_run: bool = False,
+    tray: bool = False,
     start_apps: StartAppsIndex | None = None,
     is_valid_key: Callable[[str], bool] | None = None,
     dispatcher_factory: Callable[..., Dispatcher] = build_dispatcher,
@@ -423,6 +461,8 @@ def build_app(
         dispatcher=dispatcher,
         feedback=feedback_factory(settings.feedback.sound),
         view=DebugWindow() if debug else None,
+        view_factory=DebugWindow if tray else None,
+        close_quits=not tray,
     )
     logger.info(
         "config %s: %d binding(s), dry_run=%s, debug=%s",
