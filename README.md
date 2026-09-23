@@ -41,6 +41,23 @@ The shortcut runs `pythonw -m gesture_remote --tray`. The icon near the clock is
 red when disarmed. Its menu: show the camera window (or double-click the icon), edit
 `config.yaml`, open the log, quit. A startup error is shown in a message box.
 
+## Your own gestures
+
+Besides the 7 built-in gestures, you can teach it yours. Quit the tray app first if the camera
+does not open.
+
+```powershell
+.\.venv\Scripts\python tools\record.py rock      # hold the gesture ~10 s, move your hand a little
+.\.venv\Scripts\python tools\record.py rock      # a 2nd recording: gives a real accuracy score
+.\.venv\Scripts\python tools\record.py none      # relaxed hand / typing: fewer false triggers
+.\.venv\Scripts\python tools\train.py            # prints the accuracy, saves models\custom_gestures.joblib
+```
+
+Then bind it in `config.yaml` (`rock: { type: url, url: "https://..." }`) and restart the app.
+Only the hand's landmark numbers are saved (`data\`, never committed), never an image. A custom
+gesture is used only when the built-in model sees no built-in gesture, and only at or above
+`settings.recognition.custom_min_score` (0.8).
+
 ## Macros
 
 A macro is a Python script in `macros/`, bound with `{ type: script, path: macros/my_macro.py }`.

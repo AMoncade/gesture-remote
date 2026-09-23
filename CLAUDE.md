@@ -193,3 +193,14 @@ Lot A's and lot C's round-1 files are now on `main`; changes to them go through 
 - [x] Tray mode (from phase 3, simplified): `--tray`, `tools\make_shortcut.py`, nicer overlay.
       Not established: the very first `--tray` launch stalled > 30 s before the model loaded
       (killed); the next one was ready in 2 s and every step replayed alone takes 1–2 s.
+- [x] Phase 2, simple version: `tools\record.py LABEL` (raw landmarks → `data\<label>\*.csv`),
+      `tools\train.py` (RandomForest on `normalize_landmarks`, accuracy on held-out
+      recordings, `models\custom_gestures.joblib` with `FEATURES_VERSION`), `custom.py`
+      (`CustomGestureRecognizer` wraps the canned one, relabels **only `none` hands** at
+      `custom_min_score`). The app reads the model's labels before loading the config
+      (`custom_model_path`), so custom names are bindable; a new model needs a restart.
+      Verified: train.py on recordings synthesised from the sample photos (100 %, easy data);
+      not yet on real recordings of the user. Deliberately not done: the gesture embedder
+      suggested by the research (`gesture-remote-recherche-modeles.md`) — try it if the
+      landmark features prove too weak.
+- [ ] Phase 3 leftovers (only if wanted): short/hold, combos, confirmations, global hotkey.

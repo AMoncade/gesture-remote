@@ -62,6 +62,10 @@ class RecognitionSettings(_Strict):
     min_hand_detection_confidence: float = Field(0.5, ge=0, le=1)
     min_hand_presence_confidence: float = Field(0.5, ge=0, le=1)
     min_tracking_confidence: float = Field(0.5, ge=0, le=1)
+    custom_model: Path = Path("models/custom_gestures.joblib")
+    """Your own gestures, trained by tools/train.py. Used only when the file exists."""
+    custom_min_score: float = Field(0.8, gt=0, le=1)
+    """A custom gesture replaces the built-in label only at or above this confidence."""
 
 
 class GestureOverride(_Strict):
@@ -414,7 +418,10 @@ def _check_in_context(
     settings = config.settings.model_copy(
         update={
             "recognition": recognition.model_copy(
-                update={"model": _absolute(recognition.model, base_dir)}
+                update={
+                    "model": _absolute(recognition.model, base_dir),
+                    "custom_model": _absolute(recognition.custom_model, base_dir),
+                }
             )
         }
     )
@@ -469,6 +476,24 @@ def _key_issue(key: str, is_valid_key: Callable[[str], bool]) -> str:
 def _unknown_label(label: str, labels: Iterable[str]) -> str:
     known = ", ".join(sorted(set(labels) - {NONE_LABEL}))
     return f"unknown gesture label {label!r} (known: {known})"
+
+
+def custom_model_path(config_path: str | os.PathLike[str]) -> Path:
+    """Where `settings.recognition.custom_model` points, before the config is fully loaded.
+
+    The custom model's labels must be known to validate the bindings, so the app reads this
+    first. Tolerant on purpose: on any problem it returns the default location, and the real
+    load reports the problem.
+    """
+    config_path = Path(config_path).absolute()
+    default = RecognitionSettings.model_fields["custom_model"].default
+    try:
+        raw = _read_yaml(config_path)
+        value = raw["settings"]["recognition"]["custom_model"]  # type: ignore[index]
+        path = Path(value) if isinstance(value, str) else default
+    except (ConfigError, KeyError, TypeError):
+        path = default
+    return _absolute(path, config_path.parent)
 
 
 def _absolute(path: Path, base_dir: Path) -> Path:

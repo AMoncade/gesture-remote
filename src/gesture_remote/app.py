@@ -35,8 +35,10 @@ from gesture_remote.config import (
     ConfigReload,
     ConfigStore,
     IdleSettings,
+    custom_model_path,
     load_config,
 )
+from gesture_remote.custom import CustomGestureRecognizer, CustomModel, StaleModelError
 from gesture_remote.debug_view import (
     DebugWindow,
     EngineSnapshotLike,
@@ -433,9 +435,20 @@ def build_app(
         import pyautogui
 
         is_valid_key = pyautogui.isValidKey
+    # Custom gestures first: their labels must be known to validate the bindings.
+    custom_path = custom_model_path(config_path)
+    custom: CustomModel | None = None
+    if custom_path.exists():
+        try:
+            custom = CustomModel.load(custom_path)
+        except (StaleModelError, OSError, EOFError) as error:
+            raise ConfigError(
+                Path(config_path), [f"settings.recognition.custom_model: {error}"]
+            ) from None
+    labels = MediaPipeGestureRecognizer.labels | (custom.labels if custom else frozenset())
     load = functools.partial(
         load_config,
-        labels=MediaPipeGestureRecognizer.labels,
+        labels=labels,
         is_valid_key=is_valid_key,
         resolve_app=index.resolve,
     )
@@ -451,6 +464,10 @@ def build_app(
 
     dispatcher = dispatcher_factory(log_dir=log_dir / "scripts", start_apps=index, dry_run=dry_run)
     recognizer = recognizer_factory(model, settings.recognition)
+    if custom is not None:
+        recognizer = CustomGestureRecognizer(
+            recognizer, custom, settings.recognition.custom_min_score
+        )
     camera = camera_factory(settings.camera)
     reloads = ReloadSlot()
     pipeline = Pipeline(

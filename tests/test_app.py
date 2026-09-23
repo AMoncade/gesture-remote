@@ -559,6 +559,33 @@ def build(config_file: Path, tmp_path: Path, **overrides: Any) -> tuple[App, dic
     return build_app(config_file, **kwargs), parts
 
 
+def test_a_custom_model_makes_its_gestures_bindable(config_file: Path, tmp_path: Path) -> None:
+    from sklearn.ensemble import RandomForestClassifier
+
+    from gesture_remote.custom import CustomGestureRecognizer, CustomModel
+
+    features = np.vstack([np.zeros((4, 63)), np.ones((4, 63))])
+    classifier = RandomForestClassifier(n_estimators=3).fit(features, ["none"] * 4 + ["rock"] * 4)
+    CustomModel(classifier).save(tmp_path / "models" / "custom_gestures.joblib")
+    config_file.write_text(
+        config_file.read_text(encoding="utf-8") + "  rock: { type: keys, keys: [playpause] }\n",
+        encoding="utf-8",
+    )
+    app, _ = build(config_file, tmp_path)
+    assert "rock" in app.store.config.bindings
+    assert isinstance(app.recognizer, CustomGestureRecognizer)
+    assert "rock" in app.recognizer.labels and "victory" in app.recognizer.labels
+
+
+def test_without_a_custom_model_its_gestures_are_refused(config_file: Path, tmp_path: Path) -> None:
+    config_file.write_text(
+        config_file.read_text(encoding="utf-8") + "  rock: { type: keys, keys: [playpause] }\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError, match="rock"):
+        build(config_file, tmp_path)
+
+
 def test_build_app_shares_one_start_menu_index(config_file: Path, tmp_path: Path) -> None:
     app, parts = build(config_file, tmp_path)
     ((_, dispatcher_kwargs),) = parts["dispatcher"].calls
