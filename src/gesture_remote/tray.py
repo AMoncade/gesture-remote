@@ -77,6 +77,15 @@ def run_with_tray(app: App, config_path: Path, log_file: Path) -> int:
 
     def refresh(icon) -> None:
         icon.visible = True
+        # The icon often lands in the hidden overflow (^) near the clock: say where it is.
+        try:
+            icon.notify(
+                "Lancé. Icône près de l'horloge (flèche ^) : double-clic pour voir la caméra. "
+                "✌️ tenu ou menu Quitter pour fermer.",
+                "gesture-remote",
+            )
+        except Exception:  # notifications unsupported or disabled: not worth failing for
+            logger.debug("tray notification failed", exc_info=True)
         shown = None
         while worker.is_alive() and not app.stop.is_set():
             state = "armed" if app.pipeline.engine.armed else "disarmed"

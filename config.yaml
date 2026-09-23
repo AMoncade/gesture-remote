@@ -14,7 +14,7 @@ settings:
   idle:     { fps: 5, after_s: 1.0 }
   feedback: { sound: true }
 bindings:
-  open_palm:   { type: keys,   keys: [playpause] }
+  open_palm:   { type: url,    url: "https://studium.umontreal.ca" }
   victory:     { type: quit }   # ✌️ closes gesture-remote (held a bit longer, see per_gesture)
   pointing_up: { type: launch, app: "Apple Music" }
   thumb_down:  { type: script, path: macros/example_hello.py }
