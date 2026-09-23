@@ -86,15 +86,24 @@ class GestureEngine:
         bindings: Mapping[str, ActionSpec],
         *,
         now: float,
+        armed: bool | None = None,
     ) -> None:
-        """`now` is the (re)start time: the engine is in cooldown until now + cooldown_s."""
+        """`now` is the (re)start time: the engine is in cooldown until now + cooldown_s.
+
+        `armed` carries the state of the previous engine over a config reload; None (a fresh
+        start) means `settings.start_armed`. Without it a user who disarmed before a call would be
+        re-armed silently by any edit of config.yaml. It is ignored when the new settings have no
+        arm gesture: nothing could re-arm the engine (the loader refuses start_armed: false then).
+        """
         self._settings = settings
         self._bindings = dict(bindings)
         self._tracker = SegmentTracker(
             stable_frames=self._stable_frames, release_s=settings.release_s
         )
         self._fates: dict[str, _Fate] = {}
-        self._armed = settings.start_armed
+        if armed is None or settings.arm_gesture is None:
+            armed = settings.start_armed
+        self._armed = armed
         self._startup_until = now + settings.cooldown_s
         self._cooldown_until = self._startup_until
         self._now = now

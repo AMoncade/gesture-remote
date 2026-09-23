@@ -462,16 +462,6 @@ def test_shipped_config_fires_every_binding_through_the_real_dispatcher(tmp_path
 # --- 7. engine state across a config reload -------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "DEFECT (owner: B, engine.py; caller: app.py): a config reload recreates GestureEngine "
-        "from settings.start_armed, so a user who disarmed with the arm gesture (e.g. before a "
-        "call) is silently re-armed by any edit of config.yaml, with no ArmedChanged event and "
-        "no sound. GestureEngine has no way to carry `armed` over. Proposed: an `armed: bool | "
-        "None = None` keyword that overrides start_armed."
-    ),
-)
 def test_disarmed_state_survives_a_config_reload() -> None:
     settings = EngineSettings(arm_gesture="i_love_you", start_armed=True, stable_frames=5)
     bindings = {"open_palm": {"type": "keys", "keys": ["playpause"]}}

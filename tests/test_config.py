@@ -54,6 +54,8 @@ class FakeStartMenu:
             return APPLE_MUSIC_ID
         if name == "Twin":
             raise AppResolutionError("'Twin' is ambiguous: A.Twin!App, B.Twin!App")
+        if name == "Mute":
+            raise AppResolutionError("Get-StartApps returned nothing")
         raise AppResolutionError(f"no Start-menu app named {name!r}; did you mean 'Apple Music'?")
 
 
@@ -175,13 +177,18 @@ KEY = "{type: keys, keys: [playpause]}"
         ),
         pytest.param(
             "bindings: {pointing_up: {type: launch, app: Nope}}",
-            "bindings.pointing_up: launch app 'Nope': no Start-menu app named 'Nope'",
+            "bindings.pointing_up: launch app: no Start-menu app named 'Nope'",
             id="launch-app-missing",
         ),
         pytest.param(
             "bindings: {pointing_up: {type: launch, app: Twin}}",
-            "launch app 'Twin': 'Twin' is ambiguous: A.Twin!App, B.Twin!App",
+            "launch app: 'Twin' is ambiguous: A.Twin!App, B.Twin!App",
             id="launch-app-ambiguous",
+        ),
+        pytest.param(
+            "bindings: {pointing_up: {type: launch, app: Mute}}",
+            "bindings.pointing_up: launch app 'Mute': Get-StartApps returned nothing",
+            id="launch-app-error-without-its-name",
         ),
         pytest.param(
             "bindings: {pointing_up: {type: launch, path: sub/missing.exe}}",

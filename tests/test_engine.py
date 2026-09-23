@@ -289,6 +289,31 @@ def test_no_fire_at_restart_when_the_gesture_is_already_held(clock: FakeClock) -
     assert fired(run.seconds(None, 0.8) + run.frames("open_palm", 10)) == ["open_palm"]
 
 
+def test_a_reload_carries_the_disarmed_state_over(clock: FakeClock) -> None:
+    run = ready(clock)
+    run.frames("i_love_you", 15)
+    reloaded = GestureEngine(PLAN_SETTINGS, BINDINGS, now=clock.now, armed=run.engine.armed)
+    assert reloaded.armed is False
+    after = Script(reloaded, clock)
+    assert after.seconds(None, 1.5) + after.seconds("open_palm", 1.0) == [
+        Ignored("open_palm", "disarmed")
+    ]
+
+
+def test_a_carried_state_overrides_start_armed_both_ways(clock: FakeClock) -> None:
+    disarmed_at_start = EngineSettings(start_armed=False)
+    assert GestureEngine(disarmed_at_start, BINDINGS, now=clock.now, armed=True).armed is True
+    assert GestureEngine(PLAN_SETTINGS, BINDINGS, now=clock.now).armed is True
+
+
+def test_a_carried_disarm_is_dropped_when_the_new_config_has_no_arm_gesture(
+    clock: FakeClock,
+) -> None:
+    # Nothing could re-arm that engine: it would stay deaf until the next restart.
+    no_arm = EngineSettings(arm_gesture=None)
+    assert GestureEngine(no_arm, BINDINGS, now=clock.now, armed=False).armed is True
+
+
 def test_no_toggle_at_restart_when_the_arm_gesture_is_already_held(clock: FakeClock) -> None:
     run = Script(GestureEngine(PLAN_SETTINGS, BINDINGS, now=clock.now), clock)
     assert run.seconds("i_love_you", 5.0) == [Ignored("i_love_you", "cooldown")]

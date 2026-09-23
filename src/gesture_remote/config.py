@@ -438,7 +438,8 @@ def _check_action(
             try:
                 resolve_app(app)
             except AppResolutionError as exc:
-                return action, [f"launch app {app!r}: {exc}"]
+                named = app in str(exc)  # lot C's messages already name the app
+                return action, [f"launch app: {exc}" if named else f"launch app {app!r}: {exc}"]
             return action, []
         case LaunchAction(path=Path() as raw_path):
             target, issue = _resolve_launch_path(raw_path, base_dir)
