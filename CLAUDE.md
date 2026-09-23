@@ -199,8 +199,13 @@ Lot A's and lot C's round-1 files are now on `main`; changes to them go through 
       (`CustomGestureRecognizer` wraps the canned one, relabels **only `none` hands** at
       `custom_min_score`). The app reads the model's labels before loading the config
       (`custom_model_path`), so custom names are bindable; a new model needs a restart.
-      Verified: train.py on recordings synthesised from the sample photos (100 %, easy data);
-      not yet on real recordings of the user. Deliberately not done: the gesture embedder
+      Verified with the user (2026-09-23): `ok` (👌) and `trois` (3 fingers) recorded twice each
+      + `none` twice; held-out ok 94 %, trois 73 % (misses → none), none 70 % (misses → trois).
+      Live: 2 ok + 2 trois fired, built-in gestures still fire, 2 min of typing/drinking → 0
+      false trigger (`count_events.py`). A gesture with one recording cannot be scored (it is
+      unseen once held out): `train.py` says so instead of printing 0 %. `data\_*` folders are
+      ignored (a mislabelled recording lives in `data\_rejected`). `config.yaml` binds `ok` and
+      `trois`: without `models\custom_gestures.joblib` (gitignored) the config is refused. Deliberately not done: the gesture embedder
       suggested by the research (`gesture-remote-recherche-modeles.md`) — try it if the
       landmark features prove too weak.
 - [ ] Phase 3 leftovers (only if wanted): short/hold, combos, confirmations, global hotkey.

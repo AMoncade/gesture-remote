@@ -16,3 +16,6 @@ logs/
 
 # IDE
 .idea/
+
+# Custom gesture model: trained from your own recordings (tools/train.py)
+models/*.joblib

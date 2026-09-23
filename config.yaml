@@ -20,3 +20,6 @@ bindings:
   thumb_down:  { type: script, path: macros/example_hello.py }
   thumb_up:    { type: keys,   keys: [volumeup], repeat_while_held: true }
   closed_fist: { type: keys,   keys: [volumemute] }
+  # your own gestures (tools/record.py + tools/train.py)
+  ok:          { type: url,    url: "https://www.youtube.com" }
+  trois:       { type: launch, path: notepad.exe }
