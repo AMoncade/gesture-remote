@@ -59,9 +59,9 @@ Clock = Callable[[], float]
 StepResult = Literal["frame", "no_frame", "quit"]
 
 NO_FRAME_WAIT_S = 0.05
+"""Pause when the camera has no frame: Camera.read() never sleeps, so this avoids a busy loop."""
 FIRED_SHOWN_S = 2.0
 """How long the overlay shows the last fired gesture."""
-"""Pause when the camera has no frame: Camera.read() never sleeps, so this avoids a busy loop."""
 
 
 # --- collaborators, structurally typed so tests can pass doubles -----------------------------

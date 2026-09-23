@@ -141,7 +141,8 @@ def _window(rows: list[tuple[str, str]]) -> None:
 
     tk.Label(
         root,
-        text="Tiens le geste ~1 s (✌️ et 🤟 un peu plus).\nIcône : près de l'horloge, flèche ^.",
+        text="Tiens le geste ~1 s (fermer et armer : un peu plus).\n"
+        "Icône : près de l'horloge, flèche ^.",
         justify="left",
         bg=BACKGROUND,
         fg=DIM_TEXT,

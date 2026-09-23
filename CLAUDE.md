@@ -2,8 +2,8 @@
 
 Windows background app: webcam → MediaPipe canned gestures → state machine → actions
 (`keys`, `launch`, `url`, `script`), driven by `config.yaml`. Personal learning project,
-100 % local. The approved phase-1 plan is `docs/plan-phase1.md` (French): it is the spec,
-do not edit it.
+100 % local. Architecture, conventions, traps and progress for anyone (human or agent)
+working on the code.
 
 ## Hard rules
 
@@ -15,15 +15,14 @@ do not edit it.
   `src/`; macros may print, it goes to `logs/scripts/`).
 - Write any file that contains a backslash (e.g. `shell:AppsFolder\`) with the Write tool, never
   through a Bash heredoc: the heredoc mangles `\`.
-- Personal project: stays out of `~/work-kit`.
 
 ## Commands (source of truth — copy from here, not from memory)
 
-Always call the venv interpreter; a bare `python` is the Microsoft Store alias on this machine.
-From a worktree, use the **absolute** path of the main checkout's venv (worktrees have no venv).
+Always call the venv interpreter; a bare `python` may be the Microsoft Store alias. From a
+git worktree, use the absolute path of the main checkout's venv (worktrees have no venv).
 
 ```powershell
-$PY = "C:\Users\adrie\gesture-remote\.venv\Scripts\python.exe"
+$PY = ".\.venv\Scripts\python.exe"
 & $PY -m pytest -q                 # whole suite; prints skipped tests (-ra in pyproject)
 & $PY -m ruff check .
 & $PY -m ruff format --check .
@@ -44,7 +43,6 @@ Measuring the running app: `.venv\Scripts\python.exe` is a **redirector** that s
 interpreter as a child process. CPU, memory and network must be read on the child
 (`ParentProcessId` = the launcher's PID), never on the launcher.
 
-No `pip install` outside the main checkout; a missing dependency is requested from the admin.
 
 ## Architecture
 
@@ -148,33 +146,8 @@ on the same landmarks.
 - Every "tests green" claim cites the commit SHA and the number of skipped tests.
 - Stage by explicit path; never `git add -A`, `git add .` or `commit -a`.
 
-## Round 1 — ownership (parallel worktrees)
-
-| Tree | Branch | Owner | Owns |
-|---|---|---|---|
-| `C:\Users\adrie\gesture-remote` | `main` | admin | everything below marked *frozen*, merges |
-| `C:\Users\adrie\gesture-remote-vision` | `lot/vision` | session A | `features.py`, `recognition.py`, `capture.py`, `test_features.py`, `test_recognition.py`, `test_capture.py`, `test_mediapipe_integration.py` |
-| `C:\Users\adrie\gesture-remote-decision` | `lot/decision` | session B | `config.py` (except public model names/fields), `config.yaml`, `segments.py`, `engine.py`, `test_config.py`, `test_segments.py`, `test_engine.py` |
-| `C:\Users\adrie\gesture-remote-actions` | `lot/actions` | session C | `actions/*`, `feedback.py`, `test_actions.py`, `test_start_apps.py`, `test_feedback.py` |
-
-*Frozen for the round (admin only, on request):* `pyproject.toml`, `tests/conftest.py`,
-`tests/test_privacy.py`, `CLAUDE.md`, `README.md`, `.gitignore`, `requirements.lock`, `tools/*`,
-`observation.py`, the model layer of `config.py`, `macros/example_hello.py`.
-
-Exclusive resources, brokered by the admin: the **camera** (only the admin opens it), the
-**keyboard** (no test sends a real key), no test launches a real app or URL — except the real
-subprocess of the script test (in `tmp_path`) and a read-only `Get-StartApps` (`integration`).
-
-## Round 2 — ownership (after lots A and C landed)
-
-| Tree | Branch | Owner | Owns |
-|---|---|---|---|
-| `C:\Users\adrie\gesture-remote-app` | `lot/app` | session A | `app.py`, `__main__.py`, `debug_view.py`, `logging_setup.py`, `test_app.py`, `test_debug_view.py`, `test_logging_setup.py` |
-| `C:\Users\adrie\gesture-remote-actions` | `lot/actions` | session C | `actions/*`, `feedback.py` and their tests (follow-ups only) |
-| `C:\Users\adrie\gesture-remote-decision` | `lot/decision` | session B | unchanged from round 1 |
-
-Lot A's and lot C's round-1 files are now on `main`; changes to them go through their owner
-(A: vision files, C: actions files).
+- Tests never open the camera, send a real key, or launch a real app or URL — except the real
+  subprocess of the script test (in `tmp_path`) and a read-only `Get-StartApps` (`integration`).
 
 ## Progress
 
