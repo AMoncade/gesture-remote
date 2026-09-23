@@ -1,0 +1,22 @@
+settings:
+  camera:      { index: 0, width: 640, height: 480, mirror: true, backend: auto }   # auto = DSHOW puis MSMF
+  recognition: { model: models/gesture_recognizer.task, num_hands: 1 }
+  engine:
+    min_score: 0.6
+    stable_frames: 10
+    release_s: 0.8
+    cooldown_s: 1.0
+    repeat_delay_s: 0.5
+    repeat_interval_s: 0.2
+    arm_gesture: i_love_you
+    start_armed: true
+    per_gesture: { i_love_you: { stable_frames: 15 } }
+  idle:     { fps: 5, after_s: 1.0 }
+  feedback: { sound: true }
+bindings:
+  open_palm:   { type: keys,   keys: [playpause] }
+  victory:     { type: url,    url: "https://studium.umontreal.ca" }
+  pointing_up: { type: launch, app: "Apple Music" }
+  thumb_down:  { type: script, path: macros/example_hello.py }
+  thumb_up:    { type: keys,   keys: [volumeup], repeat_while_held: true }
+  closed_fist: { type: keys,   keys: [volumemute] }
