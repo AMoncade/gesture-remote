@@ -473,8 +473,11 @@ def test_shipped_config_fires_every_binding_through_the_real_dispatcher(tmp_path
     assert open_tab.calls == [(("https://studium.umontreal.ca",), {})]  # open palm
     assert quits.calls == [((), {})]
     assert run.calls == [((["explorer.exe", "shell:AppsFolder\\" + APPLE_MUSIC_ID],), {})]
-    assert popen.argvs == []  # call_me is a custom gesture: skipped without a custom model
+    # thumb_up's macro only; call_me is a custom gesture, skipped without a custom model
+    assert popen.argvs == [["py.exe", str(REPO_ROOT / "macros" / "fullscreen_gif.py")]]
     assert powershell.calls == 1
+    popen.processes[0].finish()
+    assert scripts.wait_idle(WAIT_S)
 
 
 # --- 7. engine state across a config reload -------------------------------------------------

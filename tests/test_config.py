@@ -98,7 +98,13 @@ def test_shipped_config_loads_with_the_real_key_check(tmp_path: Path, monkeypatc
     # As on a fresh clone: no custom model, so the custom binding (call_me) is skipped.
     config = load(REPO_ROOT / "config.yaml", start_menu, skip_unknown_bindings=True)
 
-    assert set(config.bindings) == {"open_palm", "victory", "pointing_up", "closed_fist"}
+    assert set(config.bindings) == {
+        "open_palm",
+        "victory",
+        "pointing_up",
+        "closed_fist",
+        "thumb_up",
+    }
     assert config.settings.recognition.model == REPO_ROOT / "models" / "gesture_recognizer.task"
     # app: is validated through resolve_app but kept as written (lot C resolves it again).
     assert config.bindings["pointing_up"] == LaunchAction(type="launch", app="Apple Music")

@@ -19,7 +19,8 @@ bindings:
   victory:     { type: quit,   label: "Ferme gesture-remote (tenir un peu)" }
   pointing_up: { type: launch, app: "Apple Music" }
   closed_fist: { type: keys,   keys: [volumemute], label: "Coupe / remet le son" }
+  thumb_up:    { type: script, path: macros/fullscreen_gif.py, label: "Chat qui danse (plein écran)" }
   # your own gestures (tools/record.py + tools/train.py)
   call_me:     { type: script, path: macros/claude_setup.py, label: "4 terminaux Claude + app Claude" }
   # Recognised but bound to nothing (they only log "IGNORED ... unmapped"):
-  # thumb_down, thumb_up, ok, trois. Add a line here to give one an action.
+  # thumb_down, ok, trois. Add a line here to give one an action.
