@@ -23,3 +23,4 @@ bindings:
   # your own gestures (tools/record.py + tools/train.py)
   ok:          { type: url,    url: "https://www.youtube.com" }
   trois:       { type: launch, path: notepad.exe }
+  call_me:     { type: launch, app: "Calculator" }
