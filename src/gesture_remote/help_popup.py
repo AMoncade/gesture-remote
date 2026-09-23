@@ -125,6 +125,10 @@ def _window(rows: list[tuple[str, str]], preview: PreviewSource | None) -> None:
         ctypes.windll.user32.SetThreadDpiAwarenessContext(ctypes.c_void_p(-4))  # per-monitor v2
 
     root = tk.Tk()
+    # Tk prints callback errors to stderr, which pythonw does not have: send them to the log.
+    root.report_callback_exception = lambda *exc: logger.error(
+        "gestures popup callback failed", exc_info=exc
+    )
     scale = root.winfo_fpixels("1i") / 96  # fonts are in points; pixel sizes must follow
     root.overrideredirect(True)  # no title bar: our own × closes it
     root.attributes("-topmost", True)
@@ -187,8 +191,12 @@ def _camera_preview(root, preview: PreviewSource, image_width: int, relayout) ->
     from PIL import Image, ImageTk
 
     image_height = image_width * 3 // 4
-    screen = tk.Label(root, bg="black", bd=0)
-    shown: list = [None]  # keeps the PhotoImage alive: Tk only holds a weak reference
+    # A black image of the final size from the start: a Label without an image measures
+    # width/height in characters, which made the card thousands of pixels high (off screen)
+    # until the first frame arrived.
+    placeholder = ImageTk.PhotoImage(Image.new("RGB", (image_width, image_height), "black"))
+    screen = tk.Label(root, bg="black", bd=0, image=placeholder)
+    shown: list = [placeholder]  # keeps the PhotoImage alive: Tk only holds a weak reference
 
     def refresh() -> None:
         if not preview.preview_wanted:
@@ -205,7 +213,8 @@ def _camera_preview(root, preview: PreviewSource, image_width: int, relayout) ->
         preview.preview_wanted = not preview.preview_wanted
         if preview.preview_wanted:
             button.configure(text="📷  Cacher la caméra")
-            screen.configure(image="", width=image_width, height=image_height)
+            shown[0] = placeholder
+            screen.configure(image=placeholder)
             screen.pack(padx=12, pady=(0, 10), before=button)
             refresh()
         else:
