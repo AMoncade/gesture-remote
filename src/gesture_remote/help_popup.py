@@ -7,6 +7,7 @@ thread, one card at a time.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
 from typing import assert_never
@@ -106,10 +107,8 @@ def _window(rows: list[tuple[str, str]]) -> None:
 
     # Without this Tk draws at 96 DPI and Windows stretches it: blurry on a scaled screen.
     # Per thread, so the camera window and the tray icon are left as they are.
-    try:
+    with contextlib.suppress(AttributeError, OSError):
         ctypes.windll.user32.SetThreadDpiAwarenessContext(ctypes.c_void_p(-4))  # per-monitor v2
-    except (AttributeError, OSError):
-        pass
 
     root = tk.Tk()
     scale = root.winfo_fpixels("1i") / 96  # fonts are in points; pixel sizes must follow
